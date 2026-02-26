@@ -1,0 +1,23 @@
+"""Matcher sub-agent: general search on listings, infoBits; matches user intent."""
+import sys
+from pathlib import Path
+
+_qc = Path(__file__).resolve().parent.parent.parent
+if str(_qc) not in sys.path:
+    sys.path.insert(0, str(_qc))
+
+from google.adk.agents import LlmAgent
+from tools import fetch_listings_tool, fetch_info_bits_tool
+
+try:
+    from ...config import get_sub_agent_model
+except ImportError:
+    from config import get_sub_agent_model
+
+matcher_agent = LlmAgent(
+    name="matcher",
+    model=get_sub_agent_model(),
+    description="General search: listings, infoBits. Matches user intent to results.",
+    instruction="""You are the Matcher. Use fetch_listings_tool and fetch_info_bits_tool to search listings and info bits. Return max 3 results, short previews. Reply in kasi style. Reply in Markdown (use **bold** for emphasis, lists where helpful). Output only the reply to the user.""",
+    tools=[fetch_listings_tool, fetch_info_bits_tool],
+)

@@ -1,0 +1,203 @@
+rules_version = '2';
+// Queens Connect – Firestore Security Rules
+// WA number = request.auth.uid (phone auth). Authenticated users only; owners edit own docs; public-style read for search.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. users – one doc per WA number (uid)
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // 2. userSessions – subcollection under users/{uid}
+    match /users/{uid}/userSessions/{sessionId} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // 3. listings – discovery; anyone authenticated can read; only owner can write
+    match /listings/{listingId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // 4. infoBits – discovery; read all auth; write own only
+    match /infoBits/{infoBitId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.authorUid == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.authorUid == request.auth.uid;
+    }
+
+    // 5. news – read for discovery; writes via Cloud Functions only (no client write)
+    match /news/{newsId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // 6. knowledgeShare – cultural knowledge; read for search
+    match /knowledgeShare/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // 7. events – read for discovery
+    match /events/{eventId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && resource.data.get('createdBy', '') == request.auth.uid;
+    }
+
+    // 8. towns – reference data; read only
+    match /towns/{townId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // 9. suburbs – reference data with town reference; read only
+    match /suburbs/{suburbId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // 10. govInfo – government info; read only
+    match /govInfo/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // 11. emergencyNumbers – read only
+    match /emergencyNumbers/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // 12. payments – only payer/payee involved
+    match /payments/{paymentId} {
+      allow read: if request.auth != null
+        && (resource.data.payerUid == request.auth.uid || resource.data.payeeUid == request.auth.uid);
+      allow create: if request.auth != null;
+      allow update, delete: if false;
+    }
+
+    // 13. wallets – one per user; owner only
+    match /wallets/{walletId} {
+      allow read, update, delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    // 14. lostAndFound – read all auth; create any auth; update/delete own
+    match /lostAndFound/{docId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && resource.data.reporterUid == request.auth.uid;
+    }
+
+    // 15. complaints – read all auth; create any; update only reporter or backend
+    match /complaints/{complaintId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && resource.data.reporterUid == request.auth.uid;
+    }
+
+    // 16. communityUpdates – discovery read
+    match /communityUpdates/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // 17. transportFares – read for search; writes via Functions or owner
+    match /transportFares/{fareId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && resource.data.get('authorUid', '') == request.auth.uid;
+    }
+
+    // 18. transportLocations – read for search
+    match /transportLocations/{locId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null;
+    }
+
+    // 19. subscriptions – owner only
+    match /subscriptions/{subId} {
+      allow read, write: if request.auth != null && resource.data.userUid == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userUid == request.auth.uid;
+    }
+
+    // 20. ratingsAndReviews – subcollection under listings/{listingId}
+    match /listings/{listingId}/ratingsAndReviews/{reviewId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && resource.data.reviewerUid == request.auth.uid;
+    }
+
+    // 21. deals – buyer or seller can read/write
+    match /deals/{dealId} {
+      allow read, update, delete: if request.auth != null
+        && (resource.data.buyerUid == request.auth.uid || resource.data.sellerUid == request.auth.uid);
+      allow create: if request.auth != null
+        && (request.resource.data.buyerUid == request.auth.uid || request.resource.data.sellerUid == request.auth.uid);
+    }
+
+    // 22. moderationQueue – backend only; no client write
+    match /moderationQueue/{docId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // 23. notifications – user reads own (targetUid = recipient)
+    match /notifications/{notifId} {
+      allow read: if request.auth != null && resource.data.targetUid == request.auth.uid;
+      allow write: if false;
+    }
+
+    // 24. configs – single doc "global"; read for all auth, write none from client
+    match /configs/global {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // 25. verifications – KYC results; user reads own; writes via backend/Functions only
+    match /verifications/{waNumber} {
+      allow read: if request.auth != null && request.auth.uid == waNumber;
+      allow write: if false;
+    }
+
+    // 26. lenders – own doc only
+    match /lenders/{lenderUid} {
+      allow read, write: if request.auth != null && request.auth.uid == lenderUid;
+      allow create: if request.auth != null && request.resource.data.lenderUid == request.auth.uid;
+    }
+
+    // 27. borrowers – own doc only
+    match /borrowers/{borrowerUid} {
+      allow read, write: if request.auth != null && request.auth.uid == borrowerUid;
+      allow create: if request.auth != null && request.resource.data.borrowerUid == request.auth.uid;
+    }
+
+    // 28. loan_requests – borrower creates and manages own requests; lenders access via backend/Functions
+    match /loan_requests/{loanRequestId} {
+      // Borrower can create their own request
+      allow create: if request.auth != null
+        && request.resource.data.borrowerUid == request.auth.uid;
+
+      // Borrower can read/update/cancel their own request
+      allow read, update, delete: if request.auth != null
+        && resource.data.borrowerUid == request.auth.uid;
+    }
+
+    // 29. loans – borrower and lender can read their own loans; writes via backend/Functions only
+    match /loans/{loanId} {
+      allow read: if request.auth != null
+        && (resource.data.borrowerUid == request.auth.uid || resource.data.lenderUid == request.auth.uid);
+      allow write: if false;
+    }
+
+    // 30. lender_views – unlocked loan request views per lender (used for masking/unlocking)
+    match /lenders/{lenderUid}/views/{viewId} {
+      allow read, write: if request.auth != null && request.auth.uid == lenderUid;
+    }
+  }
+}

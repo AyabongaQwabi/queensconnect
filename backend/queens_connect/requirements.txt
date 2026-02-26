@@ -1,0 +1,6 @@
+# Use backend/requirements.txt for the web server (single venv).
+# This file kept for reference when running run_orchestrator.py standalone.
+firebase-admin>=6.0.0
+python-dotenv>=1.0.0
+requests>=2.28.0
+google-adk>=0.1.0
