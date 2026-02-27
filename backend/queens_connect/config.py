@@ -20,7 +20,7 @@ GROK_MODEL = os.environ.get("GROK_MODEL", "xai/grok-4-1-fast-reasoning")
 # Direct Firestore access (tools/firebase_tools.py).
 # Firestore expects host:port only (no http://). Leave FIRESTORE_EMULATOR_HOST unset or "" for production.
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "queens-connect-2c94d")
-FIRESTORE_EMULATOR_HOST = (os.environ.get("FIRESTORE_EMULATOR_HOST") or "127.0.0.1:8086").strip()
+FIRESTORE_EMULATOR_HOST = (os.environ.get("FIRESTORE_EMULATOR_HOST") or "").strip()
 FIREBASE_ID_TOKEN = ""
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")
 

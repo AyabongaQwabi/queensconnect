@@ -33,7 +33,7 @@ Set these in the Render service **Environment** tab. Secrets (API keys) should b
 | `FIREBASE_PROJECT_ID` | Default: `queens-connect-2c94d`; set if different |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to Firebase service account JSON, or provide credentials via Render’s secret files / env (see [Firebase on Render](https://render.com/docs/firebase)) |
 
-For production, do **not** set `FIRESTORE_EMULATOR_HOST` so the app uses live Firestore.
+**Important:** Do **not** set `FIRESTORE_EMULATOR_HOST` on Render. When unset, the app uses production Firestore. If you see "using Firestore emulator" in logs, remove that env var from Render and redeploy.
 
 ### Optional
 

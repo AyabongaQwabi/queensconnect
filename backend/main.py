@@ -308,6 +308,7 @@ def _twiml_message(reply: str) -> str:
 
 
 @app.post("/webhook/twilio/whatsapp")
+@app.post("/webhook/twillio/whatsapp")  # common typo: accept so Twilio webhook URL works either way
 async def webhook_twilio_whatsapp(request: Request):
     """
     Incoming Twilio WhatsApp webhook.
