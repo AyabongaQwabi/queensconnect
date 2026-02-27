@@ -10,17 +10,17 @@ QC_DIR = Path(__file__).resolve().parent
 load_dotenv(QC_DIR / ".env")
 load_dotenv(QC_DIR.parent / ".env")
 
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "AIzaSyCkn5epSGPmz3YJ5JG_Z5nro8pQLVbHOjM") or os.environ.get("GEMINI_API_KEY", "AIzaSyCkn5epSGPmz3YJ5JG_Z5nro8pQLVbHOjM")
 # Tool/function calling: gemini-2.5-pro (or 2.5-flash, 2.0-flash). Override with MODEL= in .env.
 GEMINI_MODEL = os.environ.get("MODEL", "gemini-2.5-flash")
 # Sub-agents: Llama 4 70B via Groq (LiteLLM). Set GROQ_API_KEY in .env.
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "groq/llama-3.3-70b-versatile")
 # Grok rewrite step: xai/grok-4-1-fast-reasoning. Set XAI_API_KEY in .env.
 GROK_MODEL = os.environ.get("GROK_MODEL", "xai/grok-4-1-fast-reasoning")
-# Direct Firestore access (tools/firebase_tools.py). Hardcoded for local emulator.
-# Firestore expects host:port only (no http://). Use "" for production.
-FIREBASE_PROJECT_ID = "queens-connect-2c94d"
-FIRESTORE_EMULATOR_HOST = "127.0.0.1:8086"
+# Direct Firestore access (tools/firebase_tools.py).
+# Firestore expects host:port only (no http://). Leave FIRESTORE_EMULATOR_HOST unset or "" for production.
+FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "queens-connect-2c94d")
+FIRESTORE_EMULATOR_HOST = (os.environ.get("FIRESTORE_EMULATOR_HOST") or "127.0.0.1:8086").strip()
 FIREBASE_ID_TOKEN = ""
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")
 
