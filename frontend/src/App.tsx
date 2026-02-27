@@ -1,93 +1,110 @@
-import { useState, useEffect, useRef } from "react"
-import { ChatMessage } from "./components/ChatMessage"
-import { ChatInput } from "./components/ChatInput"
-import { TypingIndicator } from "./components/TypingIndicator"
+import { useState, useEffect, useRef } from 'react';
+import { ChatMessage } from './components/ChatMessage';
+import { ChatInput } from './components/ChatInput';
+import { TypingIndicator } from './components/TypingIndicator';
 
-const STORAGE_KEY = "queens_connect_chat"
-const WA_NUMBER_KEY = "queens_connect_wa_number"
-const SAVED_SESSIONS_KEY = "queens_connect_saved_sessions"
-const LANGUAGE_PREF_KEY = "queens_connect_language_pref"
-const WELCOME = "Hi! 👋 I'm Queens Connect. Ask me about local listings, taxi fares, events, lost & found, news, or anything in your area. What would you like to do? 😊"
-const ERROR_MSG = "Something went wrong on our side — please try again in a moment."
+const STORAGE_KEY = 'queens_connect_chat';
+const WA_NUMBER_KEY = 'queens_connect_wa_number';
+const SAVED_SESSIONS_KEY = 'queens_connect_saved_sessions';
+const LANGUAGE_PREF_KEY = 'queens_connect_language_pref';
+const WELCOME =
+  "Hi! 👋 I'm Queens Connect. Ask me about local listings, taxi fares, events, lost & found, news, or anything in your area. What would you like to do? 😊";
+const ERROR_MSG =
+  'Something went wrong on our side — please try again in a moment.';
 
 const LANGUAGE_OPTIONS = [
-  { value: "english", label: "English" },
-  { value: "xhosa", label: "Xhosa" },
-  { value: "mix", label: "English + Xhosa Mix" },
-  { value: "xhosa_light_kasi", label: "Full Xhosa / Light kasi" },
-] as const
-type LanguagePref = (typeof LANGUAGE_OPTIONS)[number]["value"]
+  { value: 'english', label: 'English' },
+  { value: 'xhosa', label: 'Xhosa' },
+  { value: 'mix', label: 'English + Xhosa Mix' },
+  { value: 'xhosa_light_kasi', label: 'Full Xhosa / Light kasi' },
+] as const;
+type LanguagePref = (typeof LANGUAGE_OPTIONS)[number]['value'];
 
 function getStoredLanguagePref(): LanguagePref {
   try {
-    const stored = localStorage.getItem(LANGUAGE_PREF_KEY)
-    if (stored && LANGUAGE_OPTIONS.some((o) => o.value === stored)) return stored as LanguagePref
+    const stored = localStorage.getItem(LANGUAGE_PREF_KEY);
+    if (stored && LANGUAGE_OPTIONS.some((o) => o.value === stored))
+      return stored as LanguagePref;
   } catch {
     // ignore
   }
-  return "english"
+  return 'english';
 }
 
-type Message = { role: "user" | "assistant"; content: string; responseTimeMs?: number }
+type Message = {
+  role: 'user' | 'assistant';
+  content: string;
+  responseTimeMs?: number;
+};
 
 type SavedSession = {
-  id: string
-  name: string
-  waNumber: string
-  messages: Message[]
-  savedAt: string
-}
+  id: string;
+  name: string;
+  waNumber: string;
+  messages: Message[];
+  savedAt: string;
+};
 
 function getSavedSessions(): SavedSession[] {
   try {
-    const raw = localStorage.getItem(SAVED_SESSIONS_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as SavedSession[]
-    if (!Array.isArray(parsed)) return []
-    return parsed.sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())
+    const raw = localStorage.getItem(SAVED_SESSIONS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as SavedSession[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.sort(
+      (a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime(),
+    );
   } catch {
-    return []
+    return [];
   }
 }
 
 function saveSessionToStore(
   name: string | undefined,
   waNumber: string,
-  messages: Message[]
+  messages: Message[],
 ): SavedSession {
-  const id = typeof crypto !== "undefined" && crypto.randomUUID
-    ? crypto.randomUUID()
-    : "sess_" + Date.now()
-  const savedAt = new Date().toISOString()
-  const displayName = (name?.trim() || "") || "Session " + new Date().toLocaleString()
-  const session: SavedSession = { id, name: displayName, waNumber, messages, savedAt }
-  const list = getSavedSessions()
-  list.unshift(session)
+  const id =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : 'sess_' + Date.now();
+  const savedAt = new Date().toISOString();
+  const displayName =
+    name?.trim() || '' || 'Session ' + new Date().toLocaleString();
+  const session: SavedSession = {
+    id,
+    name: displayName,
+    waNumber,
+    messages,
+    savedAt,
+  };
+  const list = getSavedSessions();
+  list.unshift(session);
   try {
-    localStorage.setItem(SAVED_SESSIONS_KEY, JSON.stringify(list))
+    localStorage.setItem(SAVED_SESSIONS_KEY, JSON.stringify(list));
   } catch {
     // ignore
   }
-  return session
+  return session;
 }
 
 function loadSessionFromStore(id: string): Message[] | null {
-  const list = getSavedSessions()
-  const session = list.find((s) => s.id === id)
-  if (!session) return null
+  const list = getSavedSessions();
+  const session = list.find((s) => s.id === id);
+  if (!session) return null;
   try {
-    localStorage.setItem(WA_NUMBER_KEY, session.waNumber)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(session.messages))
+    localStorage.setItem(WA_NUMBER_KEY, session.waNumber);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(session.messages));
   } catch {
-    return null
+    return null;
   }
-  return session.messages
+  return session.messages;
 }
 
 function deleteSavedSession(id: string): void {
-  const list = getSavedSessions().filter((s) => s.id !== id)
+  const list = getSavedSessions().filter((s) => s.id !== id);
   try {
-    localStorage.setItem(SAVED_SESSIONS_KEY, JSON.stringify(list))
+    localStorage.setItem(SAVED_SESSIONS_KEY, JSON.stringify(list));
   } catch {
     // ignore
   }
@@ -95,7 +112,7 @@ function deleteSavedSession(id: string): void {
 
 function clearAllSessions(): void {
   try {
-    localStorage.setItem(SAVED_SESSIONS_KEY, "[]")
+    localStorage.setItem(SAVED_SESSIONS_KEY, '[]');
   } catch {
     // ignore
   }
@@ -103,460 +120,560 @@ function clearAllSessions(): void {
 
 function getWaNumber(): string {
   try {
-    const stored = localStorage.getItem(WA_NUMBER_KEY)
-    if (stored) return stored
-    const id = "web_" + Math.random().toString(36).slice(2, 10)
-    localStorage.setItem(WA_NUMBER_KEY, id)
-    return id
+    const stored = localStorage.getItem(WA_NUMBER_KEY);
+    if (stored) return stored;
+    const id = 'web_' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem(WA_NUMBER_KEY, id);
+    return id;
   } catch {
-    return "web_guest"
+    return 'web_guest';
   }
 }
 
 function createNewSessionId(): string {
-  const id = "web_" + Math.random().toString(36).slice(2, 10)
+  const id = 'web_' + Math.random().toString(36).slice(2, 10);
   try {
-    localStorage.setItem(WA_NUMBER_KEY, id)
+    localStorage.setItem(WA_NUMBER_KEY, id);
   } catch {
     // ignore
   }
-  return id
+  return id;
 }
 
 function loadMessages(): Message[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return [{ role: "assistant", content: WELCOME }]
-    const parsed = JSON.parse(raw) as Message[]
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed
-    return [{ role: "assistant", content: WELCOME }]
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [{ role: 'assistant', content: WELCOME }];
+    const parsed = JSON.parse(raw) as Message[];
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    return [{ role: 'assistant', content: WELCOME }];
   } catch {
-    return [{ role: "assistant", content: WELCOME }]
+    return [{ role: 'assistant', content: WELCOME }];
   }
 }
 
 function saveMessages(messages: Message[]) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
   } catch {
     // ignore
   }
 }
 
 function getConversationTitle(messages: Message[]): string {
-  const firstUser = messages.find((m) => m.role === "user")
+  const firstUser = messages.find((m) => m.role === 'user');
   if (firstUser?.content) {
-    const text = firstUser.content.trim()
-    return text.length > 60 ? text.slice(0, 60) + "…" : text
+    const text = firstUser.content.trim();
+    return text.length > 60 ? text.slice(0, 60) + '…' : text;
   }
-  return "New chat"
+  return 'New chat';
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "https://homiest-simonne-unofficious.ngrok-free.dev"
+const API_URL = import.meta.env.VITE_API_URL || 'https://qwabi.co.za';
 
 function AdminPanel({ apiUrl }: { apiUrl: string }) {
-  const [lenderWa, setLenderWa] = useState("")
-  const [lenderName, setLenderName] = useState("")
-  const [lenderIdNumber, setLenderIdNumber] = useState("")
-  const [lenderAddress, setLenderAddress] = useState("")
-  const [lenderLoading, setLenderLoading] = useState(false)
-  const [lenderMessage, setLenderMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
-  const [borrowerWa, setBorrowerWa] = useState("")
-  const [borrowerName, setBorrowerName] = useState("")
-  const [borrowerIdNumber, setBorrowerIdNumber] = useState("")
-  const [borrowerAddress, setBorrowerAddress] = useState("")
-  const [borrowerLoading, setBorrowerLoading] = useState(false)
-  const [borrowerMessage, setBorrowerMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [lenderWa, setLenderWa] = useState('');
+  const [lenderName, setLenderName] = useState('');
+  const [lenderIdNumber, setLenderIdNumber] = useState('');
+  const [lenderAddress, setLenderAddress] = useState('');
+  const [lenderLoading, setLenderLoading] = useState(false);
+  const [lenderMessage, setLenderMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+  const [borrowerWa, setBorrowerWa] = useState('');
+  const [borrowerName, setBorrowerName] = useState('');
+  const [borrowerIdNumber, setBorrowerIdNumber] = useState('');
+  const [borrowerAddress, setBorrowerAddress] = useState('');
+  const [borrowerLoading, setBorrowerLoading] = useState(false);
+  const [borrowerMessage, setBorrowerMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   const submitLender = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!lenderWa.trim() || !lenderName.trim()) return
-    setLenderMessage(null)
-    setLenderLoading(true)
+    e.preventDefault();
+    if (!lenderWa.trim() || !lenderName.trim()) return;
+    setLenderMessage(null);
+    setLenderLoading(true);
     try {
       const res = await fetch(`${apiUrl}/admin/lenders`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           wa_number: lenderWa.trim(),
           display_name: lenderName.trim(),
           id_number: lenderIdNumber.trim() || undefined,
           address: lenderAddress.trim() || undefined,
         }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (res.ok && data.status === "success") {
-        setLenderMessage({ type: "success", text: `Lender created: ${data.lenderUid}` })
-        setLenderWa("")
-        setLenderName("")
-        setLenderIdNumber("")
-        setLenderAddress("")
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.status === 'success') {
+        setLenderMessage({
+          type: 'success',
+          text: `Lender created: ${data.lenderUid}`,
+        });
+        setLenderWa('');
+        setLenderName('');
+        setLenderIdNumber('');
+        setLenderAddress('');
       } else {
-        setLenderMessage({ type: "error", text: res.status === 400 ? (data.detail ?? "Failed") : (data.error_message ?? "Failed to create lender") })
+        setLenderMessage({
+          type: 'error',
+          text:
+            res.status === 400
+              ? (data.detail ?? 'Failed')
+              : (data.error_message ?? 'Failed to create lender'),
+        });
       }
     } catch {
-      setLenderMessage({ type: "error", text: "Network error" })
+      setLenderMessage({ type: 'error', text: 'Network error' });
     } finally {
-      setLenderLoading(false)
+      setLenderLoading(false);
     }
-  }
+  };
 
   const submitBorrower = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!borrowerWa.trim() || !borrowerName.trim()) return
-    setBorrowerMessage(null)
-    setBorrowerLoading(true)
+    e.preventDefault();
+    if (!borrowerWa.trim() || !borrowerName.trim()) return;
+    setBorrowerMessage(null);
+    setBorrowerLoading(true);
     try {
       const res = await fetch(`${apiUrl}/admin/borrowers`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           wa_number: borrowerWa.trim(),
           display_name: borrowerName.trim(),
           id_number: borrowerIdNumber.trim() || undefined,
           address: borrowerAddress.trim() || undefined,
         }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (res.ok && data.status === "success") {
-        setBorrowerMessage({ type: "success", text: `Borrower created: ${data.borrowerUid}` })
-        setBorrowerWa("")
-        setBorrowerName("")
-        setBorrowerIdNumber("")
-        setBorrowerAddress("")
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.status === 'success') {
+        setBorrowerMessage({
+          type: 'success',
+          text: `Borrower created: ${data.borrowerUid}`,
+        });
+        setBorrowerWa('');
+        setBorrowerName('');
+        setBorrowerIdNumber('');
+        setBorrowerAddress('');
       } else {
-        setBorrowerMessage({ type: "error", text: res.status === 400 ? (data.detail ?? "Failed") : (data.error_message ?? "Failed to create borrower") })
+        setBorrowerMessage({
+          type: 'error',
+          text:
+            res.status === 400
+              ? (data.detail ?? 'Failed')
+              : (data.error_message ?? 'Failed to create borrower'),
+        });
       }
     } catch {
-      setBorrowerMessage({ type: "error", text: "Network error" })
+      setBorrowerMessage({ type: 'error', text: 'Network error' });
     } finally {
-      setBorrowerLoading(false)
+      setBorrowerLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-0">
-      <div className="px-4 sm:px-5 py-4 border-b border-gray-100 shrink-0">
-        <h2 className="text-base sm:text-lg font-semibold text-gray-900">Add lenders & borrowers</h2>
-        <p className="text-sm text-gray-500 mt-0.5">Create lender or borrower profiles (e.g. for testing or manual onboarding).</p>
+    <div className='flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-0'>
+      <div className='px-4 sm:px-5 py-4 border-b border-gray-100 shrink-0'>
+        <h2 className='text-base sm:text-lg font-semibold text-gray-900'>
+          Add lenders & borrowers
+        </h2>
+        <p className='text-sm text-gray-500 mt-0.5'>
+          Create lender or borrower profiles (e.g. for testing or manual
+          onboarding).
+        </p>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid gap-4 sm:gap-6 sm:grid-cols-2 min-h-0">
-        <section className="rounded-xl border border-gray-200 bg-gray-50/50 p-5">
-          <h3 className="text-base font-medium text-gray-800 mb-4">Add lender</h3>
-          <form onSubmit={submitLender} className="space-y-4">
+      <div className='flex-1 overflow-y-auto p-4 sm:p-6 grid gap-4 sm:gap-6 sm:grid-cols-2 min-h-0'>
+        <section className='rounded-xl border border-gray-200 bg-gray-50/50 p-5'>
+          <h3 className='text-base font-medium text-gray-800 mb-4'>
+            Add lender
+          </h3>
+          <form onSubmit={submitLender} className='space-y-4'>
             <div>
-              <label htmlFor="lender-wa" className="block text-sm font-medium text-gray-700 mb-1">WhatsApp number / ID</label>
+              <label
+                htmlFor='lender-wa'
+                className='block text-sm font-medium text-gray-700 mb-1'
+              >
+                WhatsApp number / ID
+              </label>
               <input
-                id="lender-wa"
-                type="text"
+                id='lender-wa'
+                type='text'
                 value={lenderWa}
                 onChange={(e) => setLenderWa(e.target.value)}
-                placeholder="e.g. 27821234567 or web_test_1"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]"
+                placeholder='e.g. 27821234567 or web_test_1'
+                className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]'
               />
             </div>
             <div>
-              <label htmlFor="lender-name" className="block text-sm font-medium text-gray-700 mb-1">Full name and surname</label>
+              <label
+                htmlFor='lender-name'
+                className='block text-sm font-medium text-gray-700 mb-1'
+              >
+                Full name and surname
+              </label>
               <input
-                id="lender-name"
-                type="text"
+                id='lender-name'
+                type='text'
                 value={lenderName}
                 onChange={(e) => setLenderName(e.target.value)}
-                placeholder="e.g. Sipho Ngcobo"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]"
+                placeholder='e.g. Sipho Ngcobo'
+                className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]'
               />
             </div>
             <div>
-              <label htmlFor="lender-id" className="block text-sm font-medium text-gray-700 mb-1">South African ID number (13 digits)</label>
+              <label
+                htmlFor='lender-id'
+                className='block text-sm font-medium text-gray-700 mb-1'
+              >
+                South African ID number (13 digits)
+              </label>
               <input
-                id="lender-id"
-                type="text"
+                id='lender-id'
+                type='text'
                 value={lenderIdNumber}
                 onChange={(e) => setLenderIdNumber(e.target.value)}
-                placeholder="e.g. 9001015001087"
+                placeholder='e.g. 9001015001087'
                 maxLength={13}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]"
+                className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]'
               />
             </div>
             <div>
-              <label htmlFor="lender-address" className="block text-sm font-medium text-gray-700 mb-1">Physical address</label>
+              <label
+                htmlFor='lender-address'
+                className='block text-sm font-medium text-gray-700 mb-1'
+              >
+                Physical address
+              </label>
               <input
-                id="lender-address"
-                type="text"
+                id='lender-address'
+                type='text'
                 value={lenderAddress}
                 onChange={(e) => setLenderAddress(e.target.value)}
-                placeholder="e.g. 123 Ezibeleni, Zone 3, Komani"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]"
+                placeholder='e.g. 123 Ezibeleni, Zone 3, Komani'
+                className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]'
               />
             </div>
             {lenderMessage && (
-              <p className={`text-sm ${lenderMessage.type === "success" ? "text-emerald-600" : "text-red-600"}`}>
+              <p
+                className={`text-sm ${lenderMessage.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}
+              >
                 {lenderMessage.text}
               </p>
             )}
             <button
-              type="submit"
+              type='submit'
               disabled={lenderLoading || !lenderWa.trim() || !lenderName.trim()}
-              className="w-full rounded-xl bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 text-sm transition-colors"
+              className='w-full rounded-xl bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 text-sm transition-colors'
             >
-              {lenderLoading ? "Creating…" : "Create lender"}
+              {lenderLoading ? 'Creating…' : 'Create lender'}
             </button>
           </form>
         </section>
-        <section className="rounded-xl border border-gray-200 bg-gray-50/50 p-5">
-          <h3 className="text-base font-medium text-gray-800 mb-4">Add borrower</h3>
-          <form onSubmit={submitBorrower} className="space-y-4">
+        <section className='rounded-xl border border-gray-200 bg-gray-50/50 p-5'>
+          <h3 className='text-base font-medium text-gray-800 mb-4'>
+            Add borrower
+          </h3>
+          <form onSubmit={submitBorrower} className='space-y-4'>
             <div>
-              <label htmlFor="borrower-wa" className="block text-sm font-medium text-gray-700 mb-1">WhatsApp number / ID</label>
+              <label
+                htmlFor='borrower-wa'
+                className='block text-sm font-medium text-gray-700 mb-1'
+              >
+                WhatsApp number / ID
+              </label>
               <input
-                id="borrower-wa"
-                type="text"
+                id='borrower-wa'
+                type='text'
                 value={borrowerWa}
                 onChange={(e) => setBorrowerWa(e.target.value)}
-                placeholder="e.g. 27821234567 or web_test_1"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]"
+                placeholder='e.g. 27821234567 or web_test_1'
+                className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]'
               />
             </div>
             <div>
-              <label htmlFor="borrower-name" className="block text-sm font-medium text-gray-700 mb-1">Full name and surname</label>
+              <label
+                htmlFor='borrower-name'
+                className='block text-sm font-medium text-gray-700 mb-1'
+              >
+                Full name and surname
+              </label>
               <input
-                id="borrower-name"
-                type="text"
+                id='borrower-name'
+                type='text'
                 value={borrowerName}
                 onChange={(e) => setBorrowerName(e.target.value)}
-                placeholder="e.g. Awonke S."
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]"
+                placeholder='e.g. Awonke S.'
+                className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]'
               />
             </div>
             <div>
-              <label htmlFor="borrower-id" className="block text-sm font-medium text-gray-700 mb-1">South African ID number (13 digits)</label>
+              <label
+                htmlFor='borrower-id'
+                className='block text-sm font-medium text-gray-700 mb-1'
+              >
+                South African ID number (13 digits)
+              </label>
               <input
-                id="borrower-id"
-                type="text"
+                id='borrower-id'
+                type='text'
                 value={borrowerIdNumber}
                 onChange={(e) => setBorrowerIdNumber(e.target.value)}
-                placeholder="e.g. 9001015001087"
+                placeholder='e.g. 9001015001087'
                 maxLength={13}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]"
+                className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]'
               />
             </div>
             <div>
-              <label htmlFor="borrower-address" className="block text-sm font-medium text-gray-700 mb-1">Physical address</label>
+              <label
+                htmlFor='borrower-address'
+                className='block text-sm font-medium text-gray-700 mb-1'
+              >
+                Physical address
+              </label>
               <input
-                id="borrower-address"
-                type="text"
+                id='borrower-address'
+                type='text'
                 value={borrowerAddress}
                 onChange={(e) => setBorrowerAddress(e.target.value)}
-                placeholder="e.g. 123 Ezibeleni, Zone 3, Komani"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]"
+                placeholder='e.g. 123 Ezibeleni, Zone 3, Komani'
+                className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]'
               />
             </div>
             {borrowerMessage && (
-              <p className={`text-sm ${borrowerMessage.type === "success" ? "text-emerald-600" : "text-red-600"}`}>
+              <p
+                className={`text-sm ${borrowerMessage.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}
+              >
                 {borrowerMessage.text}
               </p>
             )}
             <button
-              type="submit"
-              disabled={borrowerLoading || !borrowerWa.trim() || !borrowerName.trim()}
-              className="w-full rounded-xl bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 text-sm transition-colors"
+              type='submit'
+              disabled={
+                borrowerLoading || !borrowerWa.trim() || !borrowerName.trim()
+              }
+              className='w-full rounded-xl bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 text-sm transition-colors'
             >
-              {borrowerLoading ? "Creating…" : "Create borrower"}
+              {borrowerLoading ? 'Creating…' : 'Create borrower'}
             </button>
           </form>
         </section>
       </div>
     </div>
-  )
+  );
 }
 
-type ViewMode = "chat" | "admin"
+type ViewMode = 'chat' | 'admin';
 
 export default function App() {
-  const [messages, setMessages] = useState<Message[]>(loadMessages)
-  const [isLoading, setIsLoading] = useState(false)
-  const [savedSessions, setSavedSessions] = useState<SavedSession[]>(getSavedSessions)
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
-  const [saveFeedback, setSaveFeedback] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<ViewMode>("chat")
-  const listRef = useRef<HTMLDivElement>(null)
-  const sidebarRef = useRef<HTMLDivElement>(null)
-  const [languagePref, setLanguagePref] = useState<LanguagePref>(getStoredLanguagePref)
-  const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false)
-  const languageRef = useRef<HTMLDivElement>(null)
-  const [waNumber, setWaNumberState] = useState(getWaNumber)
-  const [waNumberInput, setWaNumberInput] = useState("")
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [messages, setMessages] = useState<Message[]>(loadMessages);
+  const [isLoading, setIsLoading] = useState(false);
+  const [savedSessions, setSavedSessions] =
+    useState<SavedSession[]>(getSavedSessions);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('chat');
+  const listRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const [languagePref, setLanguagePref] = useState<LanguagePref>(
+    getStoredLanguagePref,
+  );
+  const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
+  const languageRef = useRef<HTMLDivElement>(null);
+  const [waNumber, setWaNumberState] = useState(getWaNumber);
+  const [waNumberInput, setWaNumberInput] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    saveMessages(messages)
-  }, [messages])
+    saveMessages(messages);
+  }, [messages]);
 
   useEffect(() => {
-    listRef.current?.scrollTo(0, listRef.current.scrollHeight)
-  }, [messages, isLoading])
+    listRef.current?.scrollTo(0, listRef.current.scrollHeight);
+  }, [messages, isLoading]);
 
   useEffect(() => {
-    setSavedSessions(getSavedSessions())
-  }, [messages])
+    setSavedSessions(getSavedSessions());
+  }, [messages]);
 
   useEffect(() => {
-    if (saveFeedback === null) return
-    const t = setTimeout(() => setSaveFeedback(null), 2000)
-    return () => clearTimeout(t)
-  }, [saveFeedback])
+    if (saveFeedback === null) return;
+    const t = setTimeout(() => setSaveFeedback(null), 2000);
+    return () => clearTimeout(t);
+  }, [saveFeedback]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(LANGUAGE_PREF_KEY, languagePref)
+      localStorage.setItem(LANGUAGE_PREF_KEY, languagePref);
     } catch {
       // ignore
     }
-  }, [languagePref])
+  }, [languagePref]);
 
   useEffect(() => {
-    if (!languageDropdownOpen) return
+    if (!languageDropdownOpen) return;
     function handleClickOutside(e: MouseEvent) {
-      if (languageRef.current && !languageRef.current.contains(e.target as Node)) {
-        setLanguageDropdownOpen(false)
+      if (
+        languageRef.current &&
+        !languageRef.current.contains(e.target as Node)
+      ) {
+        setLanguageDropdownOpen(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [languageDropdownOpen])
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [languageDropdownOpen]);
 
   const handleNewSession = () => {
-    createNewSessionId()
-    setWaNumberState(getWaNumber())
-    setMessages([{ role: "assistant", content: WELCOME }])
-    setActiveSessionId(null)
-    setSidebarOpen(false)
-  }
+    createNewSessionId();
+    setWaNumberState(getWaNumber());
+    setMessages([{ role: 'assistant', content: WELCOME }]);
+    setActiveSessionId(null);
+    setSidebarOpen(false);
+  };
 
   const handleSetWaNumber = () => {
-    const value = waNumberInput.trim()
-    if (!value) return
+    const value = waNumberInput.trim();
+    if (!value) return;
     try {
-      localStorage.setItem(WA_NUMBER_KEY, value)
-      setWaNumberState(value)
-      setWaNumberInput("")
+      localStorage.setItem(WA_NUMBER_KEY, value);
+      setWaNumberState(value);
+      setWaNumberInput('');
     } catch {
       // ignore
     }
-  }
+  };
 
   const handleSaveSession = () => {
-    const name = window.prompt("Name this session (optional):", getConversationTitle(messages))
-    const waNumber = getWaNumber()
-    const session = saveSessionToStore(name ?? undefined, waNumber, messages)
-    setSavedSessions(getSavedSessions())
-    setSaveFeedback("Saved as " + session.name)
-    setActiveSessionId(session.id)
-  }
+    const name = window.prompt(
+      'Name this session (optional):',
+      getConversationTitle(messages),
+    );
+    const waNumber = getWaNumber();
+    const session = saveSessionToStore(name ?? undefined, waNumber, messages);
+    setSavedSessions(getSavedSessions());
+    setSaveFeedback('Saved as ' + session.name);
+    setActiveSessionId(session.id);
+  };
 
   const handleOpenSession = (id: string) => {
-    const loaded = loadSessionFromStore(id)
+    const loaded = loadSessionFromStore(id);
     if (loaded !== null) {
-      setMessages(loaded)
-      setActiveSessionId(id)
-      setWaNumberState(getWaNumber())
+      setMessages(loaded);
+      setActiveSessionId(id);
+      setWaNumberState(getWaNumber());
     }
-    setSavedSessions(getSavedSessions())
-    setSidebarOpen(false)
-  }
+    setSavedSessions(getSavedSessions());
+    setSidebarOpen(false);
+  };
 
   const handleDeleteSession = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation()
-    deleteSavedSession(id)
-    setSavedSessions(getSavedSessions())
+    e.stopPropagation();
+    deleteSavedSession(id);
+    setSavedSessions(getSavedSessions());
     if (activeSessionId === id) {
-      setActiveSessionId(null)
-      handleNewSession()
+      setActiveSessionId(null);
+      handleNewSession();
     }
-  }
+  };
 
   const handleClearAllSessions = () => {
-    if (window.confirm("Clear all saved sessions? This cannot be undone.")) {
-      clearAllSessions()
-      setSavedSessions([])
-      setActiveSessionId(null)
-      handleNewSession()
+    if (window.confirm('Clear all saved sessions? This cannot be undone.')) {
+      clearAllSessions();
+      setSavedSessions([]);
+      setActiveSessionId(null);
+      handleNewSession();
     }
-  }
+  };
 
   const handleSend = async (content: string) => {
-    const userMessage: Message = { role: "user", content }
-    setMessages((prev) => [...prev, userMessage])
-    setIsLoading(true)
-    const start = performance.now()
+    const userMessage: Message = { role: 'user', content };
+    setMessages((prev) => [...prev, userMessage]);
+    setIsLoading(true);
+    const start = performance.now();
 
     const tryStream = async () => {
       const res = await fetch(`${API_URL}/chat/stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           wa_number: getWaNumber(),
           message: content,
           language_pref: languagePref,
         }),
-      })
-      if (!res.ok || !res.body) return null
-      return res
-    }
+      });
+      if (!res.ok || !res.body) return null;
+      return res;
+    };
 
     try {
-      const res = await tryStream()
+      const res = await tryStream();
       if (res?.body) {
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ""
-        setMessages((prev) => [...prev, { role: "assistant", content: "" }])
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
 
         while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split("\n")
-          buffer = lines.pop() ?? ""
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
+            if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6)) as {
-                  text?: string
-                  done?: boolean
-                  reply?: string
-                  responseTimeMs?: number
-                  error?: string
-                }
+                  text?: string;
+                  done?: boolean;
+                  reply?: string;
+                  responseTimeMs?: number;
+                  error?: string;
+                };
                 if (data.error != null) {
                   setMessages((prev) => {
-                    const next = [...prev]
-                    const last = next[next.length - 1]
-                    if (last?.role === "assistant")
-                      next[next.length - 1] = { ...last, content: data.reply ?? ERROR_MSG }
-                    return next
-                  })
-                  break
+                    const next = [...prev];
+                    const last = next[next.length - 1];
+                    if (last?.role === 'assistant')
+                      next[next.length - 1] = {
+                        ...last,
+                        content: data.reply ?? ERROR_MSG,
+                      };
+                    return next;
+                  });
+                  break;
                 }
                 if (data.text != null) {
                   setMessages((prev) => {
-                    const next = [...prev]
-                    const last = next[next.length - 1]
-                    if (last?.role === "assistant")
-                      next[next.length - 1] = { ...last, content: last.content + data.text }
-                    return next
-                  })
+                    const next = [...prev];
+                    const last = next[next.length - 1];
+                    if (last?.role === 'assistant')
+                      next[next.length - 1] = {
+                        ...last,
+                        content: last.content + data.text,
+                      };
+                    return next;
+                  });
                 }
                 if (data.done === true) {
-                  const reply = data.reply ?? ""
-                  const responseTimeMs = data.responseTimeMs ?? Math.round(performance.now() - start)
+                  const reply = data.reply ?? '';
+                  const responseTimeMs =
+                    data.responseTimeMs ??
+                    Math.round(performance.now() - start);
                   setMessages((prev) => {
-                    const next = [...prev]
-                    const last = next[next.length - 1]
-                    if (last?.role === "assistant")
-                      next[next.length - 1] = { ...last, content: reply, responseTimeMs }
-                    return next
-                  })
+                    const next = [...prev];
+                    const last = next[next.length - 1];
+                    if (last?.role === 'assistant')
+                      next[next.length - 1] = {
+                        ...last,
+                        content: reply,
+                        responseTimeMs,
+                      };
+                    return next;
+                  });
                 }
               } catch {
                 // ignore malformed JSON
@@ -566,35 +683,42 @@ export default function App() {
         }
       } else {
         const resNonStream = await fetch(`${API_URL}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             wa_number: getWaNumber(),
             message: content,
             language_pref: languagePref,
           }),
-        })
-        const data = await resNonStream.json().catch(() => ({}))
-        const reply = resNonStream.ok && data.reply != null ? data.reply : ERROR_MSG
-        const responseTimeMs = Math.round(performance.now() - start)
-        setMessages((prev) => [...prev, { role: "assistant", content: reply, responseTimeMs }])
+        });
+        const data = await resNonStream.json().catch(() => ({}));
+        const reply =
+          resNonStream.ok && data.reply != null ? data.reply : ERROR_MSG;
+        const responseTimeMs = Math.round(performance.now() - start);
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: reply, responseTimeMs },
+        ]);
       }
     } catch {
-      const responseTimeMs = Math.round(performance.now() - start)
-      setMessages((prev) => [...prev, { role: "assistant", content: ERROR_MSG, responseTimeMs }])
+      const responseTimeMs = Math.round(performance.now() - start);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: ERROR_MSG, responseTimeMs },
+      ]);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="flex h-screen max-h-[100dvh] sm:max-h-none bg-[#e8ecf4] overflow-hidden">
+    <div className='flex h-screen max-h-[100dvh] sm:max-h-none bg-[#e8ecf4] overflow-hidden'>
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <button
-          type="button"
-          aria-label="Close menu"
-          className="fixed inset-0 bg-black/40 z-30 md:hidden"
+          type='button'
+          aria-label='Close menu'
+          className='fixed inset-0 bg-black/40 z-30 md:hidden'
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -607,86 +731,104 @@ export default function App() {
           md:rounded-r-2xl md:shadow-sm overflow-hidden
           transform transition-transform duration-200 ease-out
           md:transform-none
-          ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}
       >
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between md:block">
-          <h1 className="text-lg font-bold text-gray-900 tracking-tight">Queens Connect</h1>
+        <div className='p-4 border-b border-gray-100 flex items-center justify-between md:block'>
+          <h1 className='text-lg font-bold text-gray-900 tracking-tight'>
+            Queens Connect
+          </h1>
           <button
-            type="button"
-            aria-label="Close menu"
-            className="md:hidden p-2 -mr-2 rounded-lg text-gray-500 hover:bg-gray-100"
+            type='button'
+            aria-label='Close menu'
+            className='md:hidden p-2 -mr-2 rounded-lg text-gray-500 hover:bg-gray-100'
             onClick={() => setSidebarOpen(false)}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className='w-5 h-5'
+              fill='none'
+              stroke='currentColor'
+              viewBox='0 0 24 24'
+              aria-hidden
+            >
+              <path
+                strokeLinecap='round'
+                strokeLinejoin='round'
+                strokeWidth={2}
+                d='M6 18L18 6M6 6l12 12'
+              />
             </svg>
           </button>
         </div>
-        <div className="p-4 pt-0 border-b border-gray-100 md:border-b">
+        <div className='p-4 pt-0 border-b border-gray-100 md:border-b'>
           <button
-            type="button"
+            type='button'
             onClick={handleNewSession}
-            className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl bg-[#7c3aed] hover:bg-[#6d28d9] text-white font-medium py-2.5 text-sm transition-colors"
+            className='mt-3 w-full flex items-center justify-center gap-2 rounded-xl bg-[#7c3aed] hover:bg-[#6d28d9] text-white font-medium py-2.5 text-sm transition-colors'
           >
-            <span className="text-lg leading-none">+</span>
+            <span className='text-lg leading-none'>+</span>
             New chat
           </button>
           <button
-            type="button"
-            onClick={() => { setViewMode(viewMode === "admin" ? "chat" : "admin"); setSidebarOpen(false) }}
+            type='button'
+            onClick={() => {
+              setViewMode(viewMode === 'admin' ? 'chat' : 'admin');
+              setSidebarOpen(false);
+            }}
             className={`mt-2 w-full flex items-center justify-center gap-2 rounded-xl font-medium py-2.5 text-sm transition-colors ${
-              viewMode === "admin"
-                ? "bg-gray-200 text-gray-800"
-                : "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200"
+              viewMode === 'admin'
+                ? 'bg-gray-200 text-gray-800'
+                : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200'
             }`}
           >
-            {viewMode === "admin" ? "← Back to chat" : "Add lender / borrower"}
+            {viewMode === 'admin' ? '← Back to chat' : 'Add lender / borrower'}
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
-          <div className="px-3 py-2 flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <div className='flex-1 overflow-y-auto flex flex-col min-h-0'>
+          <div className='px-3 py-2 flex items-center justify-between'>
+            <span className='text-xs font-medium text-gray-500 uppercase tracking-wide'>
               Your conversations
             </span>
             {savedSessions.length > 0 && (
               <button
-                type="button"
+                type='button'
                 onClick={handleClearAllSessions}
-                className="text-xs text-[#7c3aed] hover:underline"
+                className='text-xs text-[#7c3aed] hover:underline'
               >
                 Clear All
               </button>
             )}
           </div>
-          <ul className="px-2 pb-4 space-y-0.5">
+          <ul className='px-2 pb-4 space-y-0.5'>
             {savedSessions.length === 0 ? (
-              <li className="px-3 py-4 text-sm text-gray-400 text-center">
+              <li className='px-3 py-4 text-sm text-gray-400 text-center'>
                 No sessions yet. Start a chat and save it.
               </li>
             ) : (
               savedSessions.map((s) => (
                 <li key={s.id}>
                   <button
-                    type="button"
+                    type='button'
                     onClick={() => handleOpenSession(s.id)}
                     className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-colors group ${
                       activeSessionId === s.id
-                        ? "bg-[#ede9fe] text-[#5b21b6]"
-                        : "hover:bg-gray-100 text-gray-700"
+                        ? 'bg-[#ede9fe] text-[#5b21b6]'
+                        : 'hover:bg-gray-100 text-gray-700'
                     }`}
                   >
-                    <span className="shrink-0 w-6 h-6 rounded bg-gray-200 flex items-center justify-center text-gray-500 text-xs">
+                    <span className='shrink-0 w-6 h-6 rounded bg-gray-200 flex items-center justify-center text-gray-500 text-xs'>
                       💬
                     </span>
-                    <span className="min-w-0 flex-1 text-sm truncate font-medium">{s.name}</span>
+                    <span className='min-w-0 flex-1 text-sm truncate font-medium'>
+                      {s.name}
+                    </span>
                     <button
-                      type="button"
+                      type='button'
                       onClick={(e) => handleDeleteSession(e, s.id)}
-                      className="shrink-0 p-1 rounded text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Delete"
-                      aria-label="Delete session"
+                      className='shrink-0 p-1 rounded text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity'
+                      title='Delete'
+                      aria-label='Delete session'
                     >
                       ×
                     </button>
@@ -697,38 +839,49 @@ export default function App() {
           </ul>
         </div>
 
-        <div className="p-3 border-t border-gray-100 space-y-2">
+        <div className='p-3 border-t border-gray-100 space-y-2'>
           {saveFeedback && (
-            <p className="text-xs text-emerald-600 px-1">{saveFeedback}</p>
+            <p className='text-xs text-emerald-600 px-1'>{saveFeedback}</p>
           )}
           <button
-            type="button"
-            onClick={() => { handleSaveSession(); setSidebarOpen(false) }}
-            className="w-full rounded-xl py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 border border-gray-200 transition-colors"
+            type='button'
+            onClick={() => {
+              handleSaveSession();
+              setSidebarOpen(false);
+            }}
+            className='w-full rounded-xl py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 border border-gray-200 transition-colors'
           >
             Save session
           </button>
-          <div className="relative" ref={languageRef}>
+          <div className='relative' ref={languageRef}>
             <button
-              type="button"
+              type='button'
               onClick={() => setLanguageDropdownOpen((o) => !o)}
-              className="w-full rounded-xl py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 border border-gray-200 flex items-center justify-between px-3"
+              className='w-full rounded-xl py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 border border-gray-200 flex items-center justify-between px-3'
             >
-              <span>🌐 {LANGUAGE_OPTIONS.find((o) => o.value === languagePref)?.label ?? languagePref}</span>
-              <span className="text-gray-400">{languageDropdownOpen ? "▲" : "▼"}</span>
+              <span>
+                🌐{' '}
+                {LANGUAGE_OPTIONS.find((o) => o.value === languagePref)
+                  ?.label ?? languagePref}
+              </span>
+              <span className='text-gray-400'>
+                {languageDropdownOpen ? '▲' : '▼'}
+              </span>
             </button>
             {languageDropdownOpen && (
-              <ul className="absolute bottom-full left-0 right-0 mb-1 rounded-xl border border-gray-200 bg-white shadow-lg py-1 z-10">
+              <ul className='absolute bottom-full left-0 right-0 mb-1 rounded-xl border border-gray-200 bg-white shadow-lg py-1 z-10'>
                 {LANGUAGE_OPTIONS.map((opt) => (
                   <li
                     key={opt.value}
-                    role="option"
+                    role='option'
                     onClick={() => {
-                      setLanguagePref(opt.value)
-                      setLanguageDropdownOpen(false)
+                      setLanguagePref(opt.value);
+                      setLanguageDropdownOpen(false);
                     }}
                     className={`px-3 py-2 text-sm cursor-pointer ${
-                      languagePref === opt.value ? "bg-[#ede9fe] text-[#5b21b6] font-medium" : "hover:bg-gray-50"
+                      languagePref === opt.value
+                        ? 'bg-[#ede9fe] text-[#5b21b6] font-medium'
+                        : 'hover:bg-gray-50'
                     }`}
                   >
                     {opt.label}
@@ -741,53 +894,67 @@ export default function App() {
       </aside>
 
       {/* Main area: chat or admin */}
-      <main className="flex-1 flex flex-col min-w-0 min-h-0 p-3 sm:p-4">
-        {viewMode === "admin" ? (
+      <main className='flex-1 flex flex-col min-w-0 min-h-0 p-3 sm:p-4'>
+        {viewMode === 'admin' ? (
           <AdminPanel apiUrl={API_URL} />
         ) : (
-          <div className="flex-1 flex flex-col bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-0">
-            <div className="px-3 sm:px-5 py-3 border-b border-gray-100 space-y-2 shrink-0">
-              <div className="flex items-center gap-2">
+          <div className='flex-1 flex flex-col bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-0'>
+            <div className='px-3 sm:px-5 py-3 border-b border-gray-100 space-y-2 shrink-0'>
+              <div className='flex items-center gap-2'>
                 <button
-                  type="button"
-                  aria-label="Open menu"
-                  className="md:hidden p-2 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100"
+                  type='button'
+                  aria-label='Open menu'
+                  className='md:hidden p-2 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100'
                   onClick={() => setSidebarOpen(true)}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  <svg
+                    className='w-5 h-5'
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                    aria-hidden
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M4 6h16M4 12h16M4 18h16'
+                    />
                   </svg>
                 </button>
-                <h2 className="flex-1 min-w-0 text-sm font-medium text-gray-500 truncate">
+                <h2 className='flex-1 min-w-0 text-sm font-medium text-gray-500 truncate'>
                   {getConversationTitle(messages)}
                 </h2>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-gray-500 shrink-0">Chat number:</span>
+              <div className='flex flex-wrap items-center gap-2'>
+                <span className='text-xs text-gray-500 shrink-0'>
+                  Chat number:
+                </span>
                 <input
-                  type="text"
-                  value={waNumberInput !== "" ? waNumberInput : waNumber}
+                  type='text'
+                  value={waNumberInput !== '' ? waNumberInput : waNumber}
                   onChange={(e) => setWaNumberInput(e.target.value)}
                   onBlur={() => waNumberInput.trim() && handleSetWaNumber()}
-                  onKeyDown={(e) => e.key === "Enter" && handleSetWaNumber()}
-                  placeholder="e.g. 27821234567"
-                  className="flex-1 min-w-0 sm:min-w-[120px] max-w-full sm:max-w-[200px] rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]"
+                  onKeyDown={(e) => e.key === 'Enter' && handleSetWaNumber()}
+                  placeholder='e.g. 27821234567'
+                  className='flex-1 min-w-0 sm:min-w-[120px] max-w-full sm:max-w-[200px] rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]'
                 />
-                {waNumberInput.trim() !== "" && waNumberInput.trim() !== waNumber && (
-                  <button
-                    type="button"
-                    onClick={handleSetWaNumber}
-                    className="rounded-lg bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-xs font-medium px-2.5 py-1.5 shrink-0"
-                  >
-                    Set
-                  </button>
-                )}
+                {waNumberInput.trim() !== '' &&
+                  waNumberInput.trim() !== waNumber && (
+                    <button
+                      type='button'
+                      onClick={handleSetWaNumber}
+                      className='rounded-lg bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-xs font-medium px-2.5 py-1.5 shrink-0'
+                    >
+                      Set
+                    </button>
+                  )}
               </div>
             </div>
 
             <div
               ref={listRef}
-              className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 space-y-4 sm:space-y-6 min-h-0"
+              className='flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 space-y-4 sm:space-y-6 min-h-0'
             >
               {messages.map((msg, i) => (
                 <ChatMessage
@@ -800,7 +967,7 @@ export default function App() {
               {isLoading && <TypingIndicator />}
             </div>
 
-            <div className="border-t border-gray-100 p-3 sm:p-4 shrink-0">
+            <div className='border-t border-gray-100 p-3 sm:p-4 shrink-0'>
               <ChatInput
                 onSend={handleSend}
                 disabled={isLoading}
@@ -811,5 +978,5 @@ export default function App() {
         )}
       </main>
     </div>
-  )
+  );
 }
