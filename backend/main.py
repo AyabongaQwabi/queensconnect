@@ -106,8 +106,9 @@ app.add_middleware(
         "https://www.qwabi.co.za",
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Proof-of-payment uploads: store under backend/uploads/pop/{loan_id}/
