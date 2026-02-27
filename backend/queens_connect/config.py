@@ -10,7 +10,7 @@ QC_DIR = Path(__file__).resolve().parent
 load_dotenv(QC_DIR / ".env")
 load_dotenv(QC_DIR.parent / ".env")
 
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "AIzaSyCkn5epSGPmz3YJ5JG_Z5nro8pQLVbHOjM") or os.environ.get("GEMINI_API_KEY", "AIzaSyCkn5epSGPmz3YJ5JG_Z5nro8pQLVbHOjM")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
 # Tool/function calling: gemini-2.5-pro (or 2.5-flash, 2.0-flash). Override with MODEL= in .env.
 GEMINI_MODEL = os.environ.get("MODEL", "gemini-2.5-flash")
 # Sub-agents: Llama 4 70B via Groq (LiteLLM). Set GROQ_API_KEY in .env.
@@ -25,7 +25,7 @@ FIREBASE_ID_TOKEN = ""
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")
 
 # Yoco Payment Links (loan unlock fees). Set YOCO_SECRET_KEY in .env (e.g. sk_test_... or sk_live_...).
-YOCO_SECRET_KEY = "sk_test_4755f59c8mYvz67ef274a8784581"
+YOCO_SECRET_KEY = os.environ.get("YOCO_SECRET_KEY", "")
 
 # Base URL for payment callbacks/success pages. Set LENDING_BASE_URL or BASE_URL in .env.
 LENDING_BASE_URL = (os.environ.get("LENDING_BASE_URL") or os.environ.get("BASE_URL") or "").strip().rstrip("/")
