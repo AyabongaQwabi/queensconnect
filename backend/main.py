@@ -102,6 +102,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "https://homiest-simonne-unofficious.ngrok-free.dev",
+        "https://qwabi.co.za",
+        "https://www.qwabi.co.za",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
