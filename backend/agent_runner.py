@@ -161,9 +161,10 @@ async def run_message_async(
     """
     Run one user message through the shared Runner and return the reply text.
     Creates or reuses session for wa_number. Uses the singleton runner from init_runner().
+    Lazy-inits the runner on first use so the server can bind to PORT before heavy startup (e.g. on Render).
     """
     if _runner is None or _session_service is None:
-        raise RuntimeError("Runner not initialized; call init_runner() at startup")
+        init_runner()
     try:
         await _ensure_session(wa_number, language_pref, session_state)
         session_id = f"wa_{wa_number}"
@@ -198,9 +199,10 @@ async def run_message_async_raw(
     """
     Run one user message through the shared Runner and return the raw reply.
     Used by the streaming endpoint to stream the reply to the client.
+    Lazy-inits the runner on first use so the server can bind to PORT before heavy startup (e.g. on Render).
     """
     if _runner is None or _session_service is None:
-        raise RuntimeError("Runner not initialized; call init_runner() at startup")
+        init_runner()
     try:
         await _ensure_session(wa_number, language_pref, session_state)
         session_id = f"wa_{wa_number}"

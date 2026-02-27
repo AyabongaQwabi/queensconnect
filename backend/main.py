@@ -86,8 +86,7 @@ class CreateUnlockPaylinkRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load agent and runner once at startup; keep them for the app lifetime."""
-    init_runner()
+    """Agent/runner are lazy-inited on first /chat or /chat/stream so the server can bind to PORT quickly (e.g. Render)."""
     yield
     # Shutdown: nothing to tear down (in-memory only)
 
