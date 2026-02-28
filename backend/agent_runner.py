@@ -195,17 +195,32 @@ async def run_message_async(
         _refresh_session_state_from_firestore(wa_number, session_id)
         content = types.Content(role="user", parts=[types.Part(text=message)])
         reply_text = ""
+        accumulated = ""
         async for event in _runner.run_async(
             user_id=wa_number,
             session_id=session_id,
             new_message=content,
         ):
-            if getattr(event, "is_final_response", lambda: False)():
-                if getattr(event, "content", None) and getattr(event.content, "parts", None):
-                    for part in event.content.parts:
-                        if getattr(part, "text", None):
-                            reply_text += part.text or ""
-        reply_text = reply_text.strip() or FALLBACK_REPLY
+            content_ev = getattr(event, "content", None)
+            parts = getattr(content_ev, "parts", None) if content_ev else None
+            if not parts:
+                if getattr(event, "is_final_response", lambda: False)() and accumulated:
+                    reply_text = accumulated.strip()
+                continue
+            for part in parts:
+                text = getattr(part, "text", None)
+                if not text:
+                    continue
+                text = text or ""
+                if getattr(event, "partial", False):
+                    accumulated += text
+                else:
+                    if getattr(event, "is_final_response", lambda: False)():
+                        reply_text = (accumulated + text).strip()
+                    accumulated += text
+            if getattr(event, "is_final_response", lambda: False)() and not reply_text and accumulated:
+                reply_text = accumulated.strip()
+        reply_text = reply_text.strip() or accumulated.strip() or FALLBACK_REPLY
         reply_text = _moderate_outbound(reply_text)
         logger.info("Moderated reply: %s", reply_text)
         return reply_text
@@ -233,17 +248,32 @@ async def run_message_async_raw(
         _refresh_session_state_from_firestore(wa_number, session_id)
         content = types.Content(role="user", parts=[types.Part(text=message)])
         reply_text = ""
+        accumulated = ""
         async for event in _runner.run_async(
             user_id=wa_number,
             session_id=session_id,
             new_message=content,
         ):
-            if getattr(event, "is_final_response", lambda: False)():
-                if getattr(event, "content", None) and getattr(event.content, "parts", None):
-                    for part in event.content.parts:
-                        if getattr(part, "text", None):
-                            reply_text += part.text or ""
-        reply_text = reply_text.strip() or FALLBACK_REPLY
+            content_ev = getattr(event, "content", None)
+            parts = getattr(content_ev, "parts", None) if content_ev else None
+            if not parts:
+                if getattr(event, "is_final_response", lambda: False)() and accumulated:
+                    reply_text = accumulated.strip()
+                continue
+            for part in parts:
+                text = getattr(part, "text", None)
+                if not text:
+                    continue
+                text = text or ""
+                if getattr(event, "partial", False):
+                    accumulated += text
+                else:
+                    if getattr(event, "is_final_response", lambda: False)():
+                        reply_text = (accumulated + text).strip()
+                    accumulated += text
+            if getattr(event, "is_final_response", lambda: False)() and not reply_text and accumulated:
+                reply_text = accumulated.strip()
+        reply_text = reply_text.strip() or accumulated.strip() or FALLBACK_REPLY
         logger.info("Raw reply: %s", reply_text)
         return reply_text
     except Exception as e:
