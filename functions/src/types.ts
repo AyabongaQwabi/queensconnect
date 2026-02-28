@@ -410,3 +410,10 @@ export interface UploadProofOfPaymentInput {
   loanId: string;
   popUrl: string;
 }
+
+// ----- Stokvel -----
+export interface NotifyStokvelNewMemberInput {
+  stokvelId: string;
+  newMemberWaNumber?: string;
+  newMemberName?: string;
+}

@@ -118,12 +118,18 @@ async def _ensure_session(wa_number: str, language_pref: str, session_state: dic
     _created_sessions.add(session_id)
 
 
+# Session idle threshold: after this many hours without activity, clear currentState to avoid stale context
+SESSION_IDLE_THRESHOLD_HOURS = 1.0
+
+
 def _refresh_session_state_from_firestore(wa_number: str, session_id: str) -> None:
     """
     Load latest user, userSession, and lender/borrower profile summaries from Firestore
     and merge them into the in-memory session state so every message sees up-to-date
     context (e.g. already joined loans programme). Uses InMemorySessionService's
     internal session storage by design; document if switching to another session service.
+    If lastActiveAt is older than SESSION_IDLE_THRESHOLD_HOURS, clear currentState so
+    the conversation is treated as fresh (avoids bloat and confusion after long idle).
     """
     if _session_service is None:
         return
@@ -150,6 +156,24 @@ def _refresh_session_state_from_firestore(wa_number: str, session_id: str) -> No
     state["lenderOrBorrowerSummary"] = json.dumps(profiles.get("lenderOrBorrowerSummary") or {}, default=str)
     state["lenderProfile"] = json.dumps(profiles.get("lenderProfile"), default=str) if profiles.get("lenderProfile") is not None else "null"
     state["borrowerProfile"] = json.dumps(profiles.get("borrowerProfile"), default=str) if profiles.get("borrowerProfile") is not None else "null"
+    # Session expiry: if user was idle > threshold, clear currentState so agent gets fresh context
+    last_active = session_doc.get("lastActiveAt")
+    if last_active:
+        try:
+            if isinstance(last_active, str):
+                last_dt = datetime.fromisoformat(last_active.replace("Z", "+00:00"))
+            elif hasattr(last_active, "timestamp"):
+                last_dt = datetime.fromtimestamp(last_active.timestamp(), tz=timezone.utc)
+            else:
+                last_dt = None
+            if last_dt is not None:
+                if last_dt.tzinfo is None:
+                    last_dt = last_dt.replace(tzinfo=timezone.utc)
+                idle_hours = (datetime.now(timezone.utc) - last_dt).total_seconds() / 3600.0
+                if idle_hours >= SESSION_IDLE_THRESHOLD_HOURS:
+                    state["currentState"] = "{}"
+        except (ValueError, TypeError, AttributeError):
+            pass
 
 
 async def run_message_async(

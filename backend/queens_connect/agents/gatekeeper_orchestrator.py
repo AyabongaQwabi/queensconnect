@@ -4,7 +4,13 @@ from pathlib import Path
 from google.adk.agents import Agent
 
 from .. import config
-from ..tools import get_user_tool, get_user_session_tool, create_user_tool
+from ..tools import (
+    get_user_tool,
+    get_user_session_tool,
+    create_user_tool,
+    get_lender_or_borrower_tool,
+    update_user_session_tool,
+)
 from ..sub_agents.onboarding_agent import onboarding_agent
 from .core_orchestrator import core_orchestrator
 
@@ -22,6 +28,7 @@ def _load_gatekeeper_instruction() -> str:
     text = path.read_text(encoding="utf-8")
     text = text.replace("{currentDate}", "{currentDate?}").replace("{waNumber}", "{waNumber?}")
     text = text.replace("{userProfile}", "{userProfile?}").replace("{userSession}", "{userSession?}")
+    text = text.replace("{lenderOrBorrowerSummary}", "{lenderOrBorrowerSummary?}")
     return text
 
 
@@ -32,6 +39,12 @@ def get_gatekeeper_agent() -> Agent:
         model=config.GEMINI_MODEL,
         description="Root gatekeeper: checks cached user/session state, transfers to onboarding_agent or core_orchestrator.",
         instruction=_load_gatekeeper_instruction(),
-        tools=[get_user_tool, get_user_session_tool, create_user_tool],
+        tools=[
+            get_user_tool,
+            get_user_session_tool,
+            create_user_tool,
+            get_lender_or_borrower_tool,
+            update_user_session_tool,
+        ],
         sub_agents=[onboarding_agent, core_orchestrator],
     )

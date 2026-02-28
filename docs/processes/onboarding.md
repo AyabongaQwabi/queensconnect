@@ -56,6 +56,17 @@
 | `advanced_complete` | Advanced details given or skipped          | “You now fully kasi official! 🔥” + safety message                                    | `onboardingComplete: true` |
 | `abandoned`         | User returns after >24h idle in onboarding | Recovery message (see section 7)                                                      | back to last step          |
 
+#### **3.1 Unified onboarding: borrower vs lender (Feb 2026)**
+
+One onboarding flow determines whether the user is a **borrower** (wants to get a small loan) or **lender** (wants to give small loans) and saves the respective profile:
+
+- At **asked_intent**, the bot asks what they want to do and clarifies: get a small loan (borrow) vs lend to others (lend).
+- If they choose **borrow** or **lend**: the bot checks if they already have a lender/borrower profile (`get_lender_or_borrower_tool`). If yes, it skips loans steps and continues to basic_complete.
+- If they need a profile: the bot saves `primaryIntent` and `loansRole` ("borrower" or "lender") on the user, then collects **ID number** and **physical address** (name comes from onboarding), sends the **Didit.me verification link**, and when the user replies "DONE", checks the result and creates the **lenders** or **borrowers** document. Then it continues with gender, DOB, and final onboarding message.
+- If they choose something else (buy/sell/news/stokvel/taxi), the bot goes straight to basic_complete with no loans steps.
+
+Users who complete main onboarding without choosing borrow/lend can join the loans programme later: they say "I want a loan" or "join loans" and are sent to **onboarding_agent** with **resumeFor: "loans"** (gatekeeper or loans_agent sets this), which runs only the loans branch (lender or borrower, ID, address, KYC) without re-asking name or area.
+
 #### **4. New Granular Database Tools we must build** (in firebase_tools.py)
 
 1. `get_user_tool(wa_number: str) → dict`

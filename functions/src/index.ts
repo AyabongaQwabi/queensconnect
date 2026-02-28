@@ -27,6 +27,7 @@ import type {
   GetLoanRequestsBatchInput,
   UnlockLoanRequestsInput,
   UploadProofOfPaymentInput,
+  NotifyStokvelNewMemberInput,
 } from "./types";
 
 admin.initializeApp();
@@ -154,6 +155,8 @@ export const orchestratorCall = functions.https.onCall(async (data: Orchestrator
         return ok(await createVerificationSessionImpl(uid, payload as unknown as CreateVerificationSessionInput));
       case "checkVerificationResult":
         return ok(await checkVerificationResultImpl(uid, payload as unknown as CheckVerificationResultInput));
+      case "notifyStokvelNewMember":
+        return ok(await notifyStokvelNewMemberImpl(uid, payload as unknown as NotifyStokvelNewMemberInput));
       default:
         return err("Unknown action: " + action);
     }
@@ -448,6 +451,40 @@ export const sendNegotiationMessage = functions.https.onCall(async (data: SendNe
   const uid = requireAuth(context);
   return ok(await sendNegotiationMessageImpl(uid, data));
 });
+
+// ---------- notifyStokvelNewMember (used via orchestratorCall) ----------
+
+async function notifyStokvelNewMemberImpl(
+  uid: string,
+  input: NotifyStokvelNewMemberInput
+): Promise<{ notified: boolean }> {
+  const { stokvelId, newMemberWaNumber, newMemberName } = input;
+  if (!stokvelId) {
+    throw new functions.https.HttpsError("invalid-argument", "stokvelId required.");
+  }
+  const memberWa = (newMemberWaNumber ?? uid).trim();
+  if (memberWa !== uid) {
+    throw new functions.https.HttpsError("permission-denied", "Only the joining member can trigger this.");
+  }
+  const stokvelSnap = await db.collection("stokvels").doc(stokvelId).get();
+  if (!stokvelSnap.exists) {
+    throw new functions.https.HttpsError("not-found", "Stokvel not found.");
+  }
+  const stokvel = stokvelSnap.data()!;
+  const ownerWaNumber = (stokvel.ownerWaNumber as string) || "";
+  const stokvelName = (stokvel.name as string) || "Stokvel";
+  const displayName = (newMemberName || memberWa).trim() || "A member";
+  await db.collection("notifications").add({
+    targetUid: ownerWaNumber,
+    title: "New stokvel join request",
+    body: `${displayName} requested to join your stokvel **${stokvelName}**.`,
+    type: "stokvel_new_member",
+    read: false,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  logAnalytics("notifyStokvelNewMember", uid, { stokvelId, ownerWaNumber: ownerWaNumber.slice(0, 6) + "***" });
+  return { notified: true };
+}
 
 // ---------- 10. createIkhokhaPaymentLink ----------
 

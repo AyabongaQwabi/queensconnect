@@ -31,9 +31,9 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 try:
-    from .tools import get_user, get_user_session
+    from .tools import get_user, get_user_session, get_lender_and_borrower_profile_summaries
 except ImportError:
-    from tools import get_user, get_user_session
+    from tools import get_user, get_user_session, get_lender_and_borrower_profile_summaries
 
 try:
     from .agent import get_root_agent
@@ -52,9 +52,10 @@ async def _run_async(
     """Run one user message through ADK Runner and return the final reply text."""
     session_service = InMemorySessionService()
     session_id = f"wa_{wa_number}"
-    # One-time load: user + userSession for gatekeeper/onboarding (zero extra DB calls after this)
+    # One-time load: user + userSession + lender/borrower for gatekeeper/onboarding
     user_doc = get_user(wa_number)
     session_doc = get_user_session(wa_number)
+    profiles = get_lender_and_borrower_profile_summaries(wa_number)
     initial_state = {
         "currentDate": datetime.now(timezone.utc).isoformat(),
         "waNumber": wa_number,
@@ -62,6 +63,9 @@ async def _run_async(
         "currentState": json.dumps(session_state, default=str) if isinstance(session_state, dict) else str(session_state),
         "userProfile": json.dumps(user_doc, default=str),
         "userSession": json.dumps(session_doc, default=str),
+        "lenderOrBorrowerSummary": json.dumps(profiles.get("lenderOrBorrowerSummary") or {}, default=str),
+        "lenderProfile": json.dumps(profiles.get("lenderProfile"), default=str) if profiles.get("lenderProfile") is not None else "null",
+        "borrowerProfile": json.dumps(profiles.get("borrowerProfile"), default=str) if profiles.get("borrowerProfile") is not None else "null",
     }
     await session_service.create_session(
         app_name=APP_NAME,
@@ -115,6 +119,8 @@ if __name__ == "__main__":
         sys.exit(1)
     wa = sys.argv[1]
     msg = " ".join(sys.argv[2:])
+    print("--------------------------------")
+    
     print(wa)
     print(msg)
     print(run(wa_number=wa, message=msg))

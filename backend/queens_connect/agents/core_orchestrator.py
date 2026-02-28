@@ -48,6 +48,7 @@ from ..sub_agents.registrar_agent import registrar_agent
 from ..sub_agents.taxi_planner_agent import taxi_planner_agent
 from ..sub_agents.loans_agent import loans_agent
 from ..sub_agents.lending_agent import lending_agent
+from ..sub_agents.stokvel_agent import stokvel_agent
 
 
 def _load_core_instruction() -> str:
@@ -126,6 +127,7 @@ def get_core_orchestrator() -> Agent:
             taxi_planner_agent,
             loans_agent,
             lending_agent,
+            stokvel_agent,
         ],
     )
 

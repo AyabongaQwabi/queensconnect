@@ -199,5 +199,19 @@ service cloud.firestore {
     match /lenders/{lenderUid}/views/{viewId} {
       allow read, write: if request.auth != null && request.auth.uid == lenderUid;
     }
+
+    // 31. stokvels – read for listing; create/update/delete by owner
+    match /stokvels/{stokvelId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.ownerWaNumber == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.ownerWaNumber == request.auth.uid;
+    }
+
+    // 32. stokvel_members – read if auth; create when joining; update/delete by member only
+    match /stokvel_members/{memberId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && resource.data.memberWaNumber == request.auth.uid;
+    }
   }
 }

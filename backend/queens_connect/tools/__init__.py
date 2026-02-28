@@ -67,6 +67,13 @@ from .lending_tools import (
     get_my_lending_stats_tool,
     record_proof_of_payment_tool,
 )
+from .stokvel_tools import (
+    create_stokvel_tool,
+    fetch_stokvels_tool,
+    get_stokvel_by_id_or_name_tool,
+    add_stokvel_member_tool,
+    create_stokvel_contribution_payment_link_tool,
+)
 
 __all__ = [
     "save_community_updates_tool",
@@ -128,4 +135,9 @@ __all__ = [
     "check_repayment_payment_status_tool",
     "get_my_lending_stats_tool",
     "record_proof_of_payment_tool",
+    "create_stokvel_tool",
+    "fetch_stokvels_tool",
+    "get_stokvel_by_id_or_name_tool",
+    "add_stokvel_member_tool",
+    "create_stokvel_contribution_payment_link_tool",
 ]

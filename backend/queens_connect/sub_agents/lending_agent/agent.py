@@ -38,7 +38,7 @@ def _load_instruction() -> str:
             "Help borrowers post loan requests and help lenders browse, unlock and accept those requests. "
             "Always call tools to read/write Firestore (loan_requests, loans, lender_views). "
             "Call get_lender_or_borrower_tool first; if needsRegistration is true, "
-            "transfer_to_agent('loans_registration_agent'). Output only the final WhatsApp reply."
+            "transfer_to_agent('loans_agent'). Output only the final WhatsApp reply."
         )
     text = path.read_text(encoding="utf-8")
     text = text.replace("{currentDate}", "{currentDate?}").replace("{waNumber}", "{waNumber?}")
@@ -66,6 +66,6 @@ lending_agent = LlmAgent(
         get_my_lending_stats_tool,
         record_proof_of_payment_tool,
     ],
-    sub_agents=[],  # loans_registration_agent is already sub_agent of loans_agent; ADK allows only one parent
+    sub_agents=[],  # loans_agent handles needsRegistration by transferring to onboarding_agent
 )
 

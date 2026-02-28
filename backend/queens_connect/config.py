@@ -44,6 +44,7 @@ CORE_ORCHESTRATOR_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "core-orchestra
 LOANS_AGENT_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "loans-agent.md"
 LOANS_REGISTRATION_AGENT_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "loans-registration-agent.md"
 LENDING_AGENT_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "lending-agent.md"
+STOKVEL_AGENT_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "stokvel-agent.md"
 GROK_REWRITE_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "grok-rewrite-system-prompt.md"
 
 # Onboarding state machine: step meaning "user finished onboarding"
@@ -85,6 +86,7 @@ ACTIONS = [
     "addLostAndFound",
     "reportContent",
     "getCommunityUpdates",
+    "notifyStokvelNewMember",
 ]
 
 def get_sub_agent_model():

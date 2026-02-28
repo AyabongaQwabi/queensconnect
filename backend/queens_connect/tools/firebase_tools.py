@@ -683,7 +683,7 @@ def fetch_transport_fares_tool(
 USER_ALLOWED_UPDATE_KEYS = frozenset({
     "name", "email", "town", "areaSection", "province", "languagePref",
     "primaryIntent", "watchTags", "customInfo", "onboardingComplete",
-    "interactionsCount", "lastActiveAt",
+    "loansRole", "interactionsCount", "lastActiveAt",
     "diditSessionToken", "diditSessionId", "kycVerifiedAt", "kycStatus",
     "gender", "dateOfBirth", "age",
 })

@@ -1,11 +1,10 @@
-"""Loans agent: entry point for lending. Routes to loans_registration_agent when user has no lender/borrower profile."""
+"""Loans agent: entry point for lending. When user has no lender/borrower profile, sets resumeFor and transfers to onboarding_agent for the loans branch."""
 from pathlib import Path
 
 from google.adk.agents import LlmAgent
 
 from ... import config
-from ...tools import get_lender_or_borrower_tool
-from ..loans_registration_agent.agent import loans_registration_agent
+from ...tools import get_lender_or_borrower_tool, update_user_session_tool
 
 
 def _load_instruction() -> str:
@@ -15,7 +14,7 @@ def _load_instruction() -> str:
     if not path.exists():
         return (
             "You are the Queens Connect Loans agent. Call get_lender_or_borrower_tool(wa_number). "
-            "If needsRegistration is true, transfer_to_agent('loans_registration_agent'). "
+            "If needsRegistration is true, call update_user_session_tool(wa_number, {\"resumeFor\": \"loans\"}), then transfer_to_agent('onboarding_agent'). "
             "Otherwise reply that they're already in the program. Warm kasi tone. Output only the reply."
         )
     text = path.read_text(encoding="utf-8")
@@ -27,8 +26,8 @@ def _load_instruction() -> str:
 loans_agent = LlmAgent(
     name="loans_agent",
     model=config.get_sub_agent_model(),
-    description="Entry point for lending. Checks lender/borrower profile; transfers to loans_registration_agent if needed.",
+    description="Entry point for lending. Checks lender/borrower profile; if needsRegistration, sets resumeFor and transfers to onboarding_agent for loans branch.",
     instruction=_load_instruction(),
-    tools=[get_lender_or_borrower_tool],
-    sub_agents=[loans_registration_agent],
+    tools=[get_lender_or_borrower_tool, update_user_session_tool],
+    sub_agents=[],
 )

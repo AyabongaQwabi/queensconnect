@@ -62,13 +62,6 @@
       "collectionGroup": "news",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "news",
-      "queryScope": "COLLECTION",
-      "fields": [
         { "fieldPath": "tags", "arrayConfig": "CONTAINS" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
@@ -135,6 +128,37 @@
       "fields": [
         { "fieldPath": "payeeUid", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "stokvels",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "stokvels",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerWaNumber", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "stokvel_members",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "stokvelId", "order": "ASCENDING" },
+        { "fieldPath": "memberWaNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "stokvel_members",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "stokvelId", "order": "ASCENDING" },
+        { "fieldPath": "joinedAt", "order": "DESCENDING" }
       ]
     }
   ],
