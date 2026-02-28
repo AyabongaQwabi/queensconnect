@@ -1088,7 +1088,7 @@ def accept_loan_request(
 ) -> Dict[str, Any]:
     """
     Accept an open loan_request:
-    - Verify lender has unlocked it.
+    - Lender may accept based on masked or full details; unlock is optional.
     - Create loans/{loanId} document.
     - Update loan_requests status -> "matched".
     - Notify borrower via WhatsApp (Twilio) that a lender agreed.
@@ -1119,11 +1119,6 @@ def accept_loan_request(
     req_data = req_snap.to_dict() or {}
     if req_data.get("status") != "open":
         return {"status": "error", "error_message": f"loan_request is not open (status={req_data.get('status')})"}
-
-    # Ensure lender has unlocked this request
-    view_ref = db.collection("lenders").document(lender).collection("views").document(req_id)
-    if not view_ref.get().exists:
-        return {"status": "error", "error_message": "You must unlock this request before accepting it."}
 
     borrower_uid = str(req_data.get("borrowerUid") or "")
     if not borrower_uid:

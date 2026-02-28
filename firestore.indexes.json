@@ -133,9 +133,7 @@
     {
       "collectionGroup": "stokvels",
       "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
+      "fields": [{ "fieldPath": "createdAt", "order": "DESCENDING" }]
     },
     {
       "collectionGroup": "stokvels",
