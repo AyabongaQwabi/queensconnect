@@ -41,6 +41,16 @@ function logAnalytics(action: string, uid: string, extra?: Record<string, unknow
   console.log("KASI-ORACLE:", action, uid, extra !== undefined ? JSON.stringify(extra) : "");
 }
 
+/** Generate 6-char alphanumeric code for pending InfoBits/transportFares (upvote flow). */
+function generateShortCode(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
 /** Notify watchers when transport fare changes (writes to notifications). */
 async function notifyWatchers(
   fareId: string,
@@ -231,7 +241,10 @@ export const updateUserProfile = functions.https.onCall(async (data: UpdateUserP
 
 const INFO_BITS_DAILY_LIMIT_FREE = 5;
 
-async function addInfoBitImpl(uid: string, input: AddInfoBitInput): Promise<{ infoBitId: string }> {
+async function addInfoBitImpl(
+  uid: string,
+  input: AddInfoBitInput
+): Promise<{ infoBitId: string; shortCode: string }> {
   const { text, tags, location, expiresHours } = input;
   if (!text || !Array.isArray(tags) || tags.length === 0) {
     throw new functions.https.HttpsError("invalid-argument", "Need text and at least one tag neh.");
@@ -261,6 +274,7 @@ async function addInfoBitImpl(uid: string, input: AddInfoBitInput): Promise<{ in
     t.setHours(t.getHours() + expiresHours);
     expiresAt = admin.firestore.Timestamp.fromDate(t);
   }
+  const shortCode = generateShortCode();
   const ref = await db.collection("infoBits").add({
     authorUid: uid,
     text,
@@ -268,10 +282,13 @@ async function addInfoBitImpl(uid: string, input: AddInfoBitInput): Promise<{ in
     location: location ?? null,
     expiresAt,
     createdAt: now,
-    upvotes: 0,
+    status: "pending",
+    shortCode,
+    upvoteWaNumbers: [],
+    pendingCreatedAt: now,
   });
   logAnalytics("addInfoBit", uid, { infoBitId: ref.id });
-  return { infoBitId: ref.id };
+  return { infoBitId: ref.id, shortCode };
 }
 
 export const addInfoBit = functions.https.onCall(async (data: AddInfoBitInput, context) => {
@@ -1065,6 +1082,38 @@ export const expireOldInfoBits = functions.pubsub.schedule("0 2 * * *").onRun(as
   snap.docs.forEach((doc) => batch.delete(doc.ref));
   if (!snap.empty) await batch.commit();
   console.log("KASI-ORACLE: expireOldInfoBits deleted", snap.size);
+  return null;
+});
+
+/** Daily: set status to "expired" for pending InfoBits and transportFares older than 7 days (no points). */
+export const expirePendingGamificationItems = functions.pubsub.schedule("0 3 * * *").onRun(async () => {
+  const now = admin.firestore.Timestamp.now();
+  const sevenDaysAgo = new Date(now.toMillis() - 7 * 24 * 60 * 60 * 1000);
+  const cutoff = admin.firestore.Timestamp.fromDate(sevenDaysAgo);
+
+  const infoBitsSnap = await db
+    .collection("infoBits")
+    .where("status", "==", "pending")
+    .where("pendingCreatedAt", "<", cutoff)
+    .limit(200)
+    .get();
+  const transportSnap = await db
+    .collection("transportFares")
+    .where("status", "==", "pending")
+    .where("pendingCreatedAt", "<", cutoff)
+    .limit(200)
+    .get();
+
+  const batch = db.batch();
+  infoBitsSnap.docs.forEach((doc) => batch.update(doc.ref, { status: "expired" }));
+  transportSnap.docs.forEach((doc) => batch.update(doc.ref, { status: "expired" }));
+  if (!infoBitsSnap.empty || !transportSnap.empty) await batch.commit();
+  console.log(
+    "KASI-ORACLE: expirePendingGamificationItems infoBits=",
+    infoBitsSnap.size,
+    "transportFares=",
+    transportSnap.size
+  );
   return null;
 });
 

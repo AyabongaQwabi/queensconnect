@@ -77,6 +77,13 @@ from .stokvel_tools import (
     add_stokvel_member_tool,
     create_stokvel_contribution_payment_link_tool,
 )
+from .gamification_tools import (
+    award_points_tool,
+    check_balance_tool,
+    record_upvote_tool,
+    redeem_voucher_tool,
+    get_voucher_stock_tool,
+)
 
 __all__ = [
     "save_community_updates_tool",
@@ -146,4 +153,9 @@ __all__ = [
     "get_stokvel_by_id_or_name_tool",
     "add_stokvel_member_tool",
     "create_stokvel_contribution_payment_link_tool",
+    "award_points_tool",
+    "check_balance_tool",
+    "record_upvote_tool",
+    "redeem_voucher_tool",
+    "get_voucher_stock_tool",
 ]

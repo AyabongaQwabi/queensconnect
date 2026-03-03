@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 from google.adk.tools import FunctionTool
 
 from .firebase_tools import _get_db, get_user
+from .gamification_tools import award_points
 
 logger = logging.getLogger("queens_connect.tools.stokvel")
 
@@ -68,6 +69,10 @@ def create_stokvel(
         "updatedAt": SERVER_TIMESTAMP,
     }
     ref.set(doc)
+    try:
+        award_points(owner, 10, "create_stokvel")
+    except Exception as e:
+        logger.warning("create_stokvel: award_points failed: %s", e)
     logger.info("create_stokvel owner=%s name=%r id=%s", _mask_wa(owner), name[:50], ref.id)
     return {
         "status": "success",
@@ -191,6 +196,16 @@ def add_stokvel_member(stokvel_id: str, member_wa_number: str) -> Dict[str, Any]
             })
         except Exception as e:
             logger.warning("add_stokvel_member: failed to write notification: %s", e)
+
+    # Award 5 Kasi Points to stokvel owner when someone joins (max 50 per stokvel)
+    if owner_wa:
+        try:
+            join_count = int(stokvel_data.get("joinPointsAwardedCount") or 0)
+            if join_count < 50:
+                award_points(owner_wa, 5, "stokvel_join")
+                stokvel_ref.update({"joinPointsAwardedCount": join_count + 1})
+        except Exception as e:
+            logger.warning("add_stokvel_member: award_points failed: %s", e)
 
     return {
         "status": "success",

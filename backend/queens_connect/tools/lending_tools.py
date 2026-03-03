@@ -20,6 +20,7 @@ from google.adk.tools import FunctionTool
 from queens_connect import config as qc_config
 
 from .firebase_tools import _get_db, get_user, update_user
+from .gamification_tools import award_points
 from .yoco import create_paylink, fetch_payment_link_status
 
 logger = logging.getLogger("queens_connect.tools.lending")
@@ -1386,6 +1387,15 @@ def complete_repayment(loan_id: str) -> Dict[str, Any]:
                 "totalValueRepaidCents": total_value + total_to_repay,
                 "updatedAt": now,
             })
+
+    # Kasi Points: repay on time +30 to borrower, lend success +15 to lender
+    try:
+        if is_on_time and borrower_uid:
+            award_points(borrower_uid, 30, "repay_on_time")
+        if lender_uid:
+            award_points(lender_uid, 15, "lend_success")
+    except Exception as e:
+        logger.warning("complete_repayment: award_points failed: %s", e)
 
     logger.info("complete_repayment loan_id=%s", loan_id_clean)
     return {"status": "success"}

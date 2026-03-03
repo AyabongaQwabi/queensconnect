@@ -48,7 +48,13 @@ export interface InfoBit {
   location?: string;
   expiresAt?: Timestamp | null;
   createdAt: Timestamp;
+  /** @deprecated use upvoteWaNumbers.length */
   upvotes?: number;
+  status?: "pending" | "approved" | "expired";
+  shortCode?: string;
+  upvoteWaNumbers?: string[];
+  pendingCreatedAt?: Timestamp;
+  pointsAwardedForApproval?: boolean;
 }
 
 // ----- 5. news -----

@@ -4,6 +4,8 @@ Granular save/fetch tools per collection with strict schemas. All saved data mus
 No random fields on insert; validation enforces schema per collection.
 """
 import logging
+import random
+import string
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
@@ -203,6 +205,11 @@ def _validate_and_prepare(
     return doc, None
 
 
+def _generate_short_code() -> str:
+    """Generate a 6-character alphanumeric code for pending InfoBits/transportFares (for upvote ABC123 style)."""
+    return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+
 def _save_doc(collection: str, doc: dict) -> str:
     """Insert document into collection; returns document id."""
     db = _get_db()
@@ -320,6 +327,11 @@ def save_events_tool(data: dict, author_wa_number: str) -> dict:
         logger.warning("save_events_tool validation failed: %s", err)
         return {"status": "error", "error_message": err}
     doc_id = _save_doc("events", doc)
+    try:
+        from .gamification_tools import award_points
+        award_points(author_wa_number, 5, "create_event")
+    except Exception as e:
+        logger.warning("save_events_tool: award_points failed: %s", e)
     return {"status": "success", "data": {"id": doc_id}}
 
 
@@ -342,15 +354,24 @@ def save_info_bits_tool(data: dict, author_wa_number: str) -> dict:
     """
     Save a short info bit (tip, taxi price, load-shedding note, etc.) to Firestore.
     Use when the user shares a quick local fact or update. Required: text, tags.
-    Optional: location, expiresHours. Returns status and document id on success.
+    Optional: location, expiresHours. Returns status, document id, and shortCode (for community upvotes).
+    New docs start as status pending; 3 upvotes in 7 days → approved → 25 Kasi Points.
     """
     logger.info("save_info_bits_tool called author=%s text=%r", _mask_author(author_wa_number), (data.get("text") or "")[:60])
     doc, err = _validate_and_prepare("infoBits", data, author_wa_number)
     if err:
         logger.warning("save_info_bits_tool validation failed: %s", err)
         return {"status": "error", "error_message": err}
+    try:
+        from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+    except ImportError:
+        from google.cloud.firestore import SERVER_TIMESTAMP
+    doc["status"] = "pending"
+    doc["shortCode"] = _generate_short_code()
+    doc["upvoteWaNumbers"] = []
+    doc["pendingCreatedAt"] = SERVER_TIMESTAMP
     doc_id = _save_doc("infoBits", doc)
-    return {"status": "success", "data": {"id": doc_id}}
+    return {"status": "success", "data": {"id": doc_id, "shortCode": doc["shortCode"]}}
 
 
 def save_knowledge_share_tool(data: dict, author_wa_number: str) -> dict:
@@ -381,6 +402,11 @@ def save_listings_tool(data: dict, author_wa_number: str) -> dict:
         return {"status": "error", "error_message": err}
     doc["ownerUid"] = doc.pop("authorUid")
     doc_id = _save_doc("listings", doc)
+    try:
+        from .gamification_tools import award_points
+        award_points(author_wa_number, 15, "create_listing")
+    except Exception as e:
+        logger.warning("save_listings_tool: award_points failed: %s", e)
     return {"status": "success", "data": {"id": doc_id}}
 
 
@@ -465,15 +491,24 @@ def save_transport_fares_tool(data: dict, author_wa_number: str) -> dict:
     Save a transport fare (taxi, bus, lift, cab) between two places to Firestore.
     Required: fromPlace, toPlace, fare, howLongItTakesToTravel, transportType, tags.
     transportType must be one of: cab, lift, bus, taxi.
-    Use when the user shares or asks to store a fare. Returns status and document id on success.
+    Use when the user shares or asks to store a fare. Returns status, document id, and shortCode (for community upvotes).
+    New docs start as status pending; 3 upvotes in 7 days → approved → 25 Kasi Points.
     """
     logger.info("save_transport_fares_tool called author=%s fromPlace=%s toPlace=%s transportType=%s fare=%s", _mask_author(author_wa_number), data.get("fromPlace"), data.get("toPlace"), data.get("transportType"), data.get("fare"))
     doc, err = _validate_and_prepare("transportFares", data, author_wa_number)
     if err:
         logger.warning("save_transport_fares_tool validation failed: %s", err)
         return {"status": "error", "error_message": err}
+    try:
+        from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+    except ImportError:
+        from google.cloud.firestore import SERVER_TIMESTAMP
+    doc["status"] = "pending"
+    doc["shortCode"] = _generate_short_code()
+    doc["upvoteWaNumbers"] = []
+    doc["pendingCreatedAt"] = SERVER_TIMESTAMP
     doc_id = _save_doc("transportFares", doc)
-    return {"status": "success", "data": {"id": doc_id}}
+    return {"status": "success", "data": {"id": doc_id, "shortCode": doc["shortCode"]}}
 
 
 # ---------- Fetch tools (one per table) ----------
@@ -776,6 +811,7 @@ def create_user(wa_number: str, initial_data: Optional[dict] = None) -> dict:
             "waNumber": wa,
             "createdAt": SERVER_TIMESTAMP,
             "languagePref": (initial_data or {}).get("languagePref", "english"),
+            "kasiPoints": 0,
         }
         allowed = {"name", "email", "town", "areaSection", "province", "languagePref"}
         for k, v in (initial_data or {}).items():

@@ -213,5 +213,10 @@ service cloud.firestore {
       allow create: if request.auth != null;
       allow update, delete: if request.auth != null && resource.data.memberWaNumber == request.auth.uid;
     }
+
+    // 33. voucher_pool – backend/Functions only (Admin SDK); no client read/write
+    match /voucher_pool/{code} {
+      allow read, write: if false;
+    }
   }
 }
