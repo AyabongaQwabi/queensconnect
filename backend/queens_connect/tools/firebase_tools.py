@@ -78,6 +78,10 @@ SCHEMAS = {
         "required": ["fromPlace", "toPlace", "fare", "howLongItTakesToTravel", "transportType", "tags"],
         "optional": ["link"],
     },
+    "cabs": {
+        "required": ["name", "services", "availability", "whatsappNumber", "tags"],
+        "optional": ["otherContactNumber", "link"],
+    },
 }
 
 TRANSPORT_TYPES = frozenset({"cab", "lift", "bus", "taxi"})
@@ -339,6 +343,8 @@ def _fetch_docs(
                     "fromPlace",
                     "toPlace",
                     "transportType",
+                    "services",
+                    "availability",
                 )
             ).lower()
             tags_str = " ".join(d.get("tags") or []).lower()
@@ -601,6 +607,21 @@ def save_transport_fares_tool(data: dict, author_wa_number: str) -> dict:
     return {"status": "success", "data": {"id": doc_id, "shortCode": doc["shortCode"]}}
 
 
+def save_cabs_tool(data: dict, author_wa_number: str) -> dict:
+    """
+    Save a cab service/driver to Firestore.
+    Schema: name, services, availability, whatsappNumber, tags. Optional: otherContactNumber, link.
+    Use when the user adds or shares a cab. Returns status and document id on success.
+    """
+    logger.info("save_cabs_tool called author=%s name=%s", _mask_author(author_wa_number), data.get("name"))
+    doc, err = _validate_and_prepare("cabs", data, author_wa_number)
+    if err:
+        logger.warning("save_cabs_tool validation failed: %s", err)
+        return {"status": "error", "error_message": err}
+    doc_id = _save_doc("cabs", doc)
+    return {"status": "success", "data": {"id": doc_id}}
+
+
 # ---------- Fetch tools (one per table) ----------
 
 
@@ -835,6 +856,31 @@ def fetch_transport_fares_tool(
     merged.sort(key=lambda r: _created_at_sort_key(r.get("createdAt")), reverse=True)
     merged = merged[:cap]
     return {"status": "success", "results": merged, "count": len(merged)}
+
+
+def fetch_cabs_tool(
+    query: str = "",
+    filters: Optional[dict] = None,
+    limit: int = 10,
+) -> dict:
+    """
+    Fetch cab drivers/services from Firestore.
+    Use when the user wants to find a cab. When the user has no specific criteria ("find any cab"),
+    call with empty query and no filters to get a random selection of cabs; otherwise use query/filters.
+    Returns status, results (each with name, services, availability, whatsappNumber, otherContactNumber), count.
+    """
+    logger.info("fetch_cabs_tool called query=%r limit=%s", (query or "")[:80], limit)
+    cap = min(int(limit), 20)
+    if not (query or "").strip() and not (filters or {}):
+        # User wants "any cab" — fetch more and return random sample
+        results = _fetch_docs("cabs", "", None, 50)
+        results = list(results)
+        if len(results) > cap:
+            results = random.sample(results, cap)
+        # else keep all results (fewer than cap)
+    else:
+        results = _fetch_docs("cabs", query, filters, cap)
+    return {"status": "success", "results": results, "count": len(results)}
 
 
 # ---------- Users & userSessions (onboarding); no SCHEMAS, free-form per spec ----------
@@ -1239,6 +1285,7 @@ save_places_tool = FunctionTool(save_places_tool)
 save_suburbs_tool = FunctionTool(save_suburbs_tool)
 save_towns_tool = FunctionTool(save_towns_tool)
 save_transport_fares_tool = FunctionTool(save_transport_fares_tool)
+save_cabs_tool = FunctionTool(save_cabs_tool)
 
 fetch_community_updates_tool = FunctionTool(fetch_community_updates_tool)
 fetch_complaints_tool = FunctionTool(fetch_complaints_tool)
@@ -1254,6 +1301,7 @@ fetch_places_tool = FunctionTool(fetch_places_tool)
 fetch_suburbs_tool = FunctionTool(fetch_suburbs_tool)
 fetch_towns_tool = FunctionTool(fetch_towns_tool)
 fetch_transport_fares_tool = FunctionTool(fetch_transport_fares_tool)
+fetch_cabs_tool = FunctionTool(fetch_cabs_tool)
 
 get_user_tool = FunctionTool(get_user_tool)
 get_user_session_tool = FunctionTool(get_user_session_tool)

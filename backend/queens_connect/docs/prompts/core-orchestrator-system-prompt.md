@@ -52,6 +52,7 @@ Tools you can call directly (use the right one for the job):
 - save_suburbs_tool — Save a suburb. Fields: name, townId, tags; optional: description, link.
 - save_towns_tool — Save a town. Fields: name, tags; optional: description, link.
 - save_transport_fares_tool — Save a fare (A to B). Fields: fromPlace, toPlace, fare, howLongItTakesToTravel, transportType (cab | lift | bus | taxi), tags. Optional: link.
+- save_cabs_tool — Save a cab service/driver. Fields: name, services, availability, whatsappNumber, tags. Optional: otherContactNumber, link.
 
 **Fetch tools (user is asking for or searching something):**
 - fetch_community_updates_tool — Get local announcements/notices.
@@ -68,6 +69,7 @@ Tools you can call directly (use the right one for the job):
 - fetch_suburbs_tool — Get suburbs (by town or query).
 - fetch_towns_tool — Get towns.
 - fetch_transport_fares_tool — Get transport fares (taxi, bus, lift, cab). Searches both transportFares and infoBits so fare tips in either place are returned; each result has sourceCollection.
+- fetch_cabs_tool — Get cab drivers/services. When the user wants to find a cab with no specific criteria, call with empty query (and no filters) to get a random selection; otherwise use query/filters. Return to the user: name, services, availability, WhatsApp number, other contact number (when present).
 
 **When returning fetch_info_bits_tool, fetch_transport_fares_tool, or fetch_places_tool results:**
 - fetch_places_tool and fetch_transport_fares_tool can return items from infoBits (see each result's `sourceCollection`). When a result has `verificationPrefix`, `upvoteInstruction`, or `postedAgo`, use them.

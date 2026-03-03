@@ -36,6 +36,8 @@ const QUICK_ACTIONS = [
   'List event',
   'File complaint',
   'List complaints',
+  'Add a cab driver',
+  'Find a cab',
 ];
 
 const QUICK_ACTION_PHRASES: Record<string, string> = {
@@ -57,6 +59,8 @@ const QUICK_ACTION_PHRASES: Record<string, string> = {
   'List event': 'I’d like to list a community event.',
   'File complaint': 'I’d like to file a community complaint.',
   'List complaints': 'I’d like to see complaints I’ve filed.',
+  'Add a cab driver': "I'd like to add a cab driver.",
+  'Find a cab': "I'd like to find a cab.",
 };
 
 const LANGUAGE_OPTIONS = [
