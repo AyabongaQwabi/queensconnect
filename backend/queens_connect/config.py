@@ -50,14 +50,6 @@ GROK_REWRITE_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "grok-rewrite-system
 # Onboarding state machine: step meaning "user finished onboarding"
 ONBOARDING_COMPLETE_STEP = "onboardingComplete"
 
-# Twilio Content Template SIDs for interactive menus (set in env after running create_whatsapp_content_templates.py)
-TWILIO_CONTENT_ONBOARDING_INTENT = os.environ.get("TWILIO_CONTENT_ONBOARDING_INTENT", "").strip()
-TWILIO_CONTENT_ONBOARDING_OPTIONAL_DETAILS = os.environ.get("TWILIO_CONTENT_ONBOARDING_OPTIONAL_DETAILS", "").strip()
-TWILIO_CONTENT_ONBOARDING_GENDER = os.environ.get("TWILIO_CONTENT_ONBOARDING_GENDER", "").strip()
-TWILIO_CONTENT_MAIN_MENU = os.environ.get("TWILIO_CONTENT_MAIN_MENU", "").strip()
-TWILIO_CONTENT_LOANS_MENU = os.environ.get("TWILIO_CONTENT_LOANS_MENU", "").strip()
-TWILIO_CONTENT_STOKVEL_MENU = os.environ.get("TWILIO_CONTENT_STOKVEL_MENU", "").strip()
-
 # Canonical field names – do not invent synonyms (see field reference.md)
 FIELD_NAMES = [
     "waNumber",

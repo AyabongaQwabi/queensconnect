@@ -31,10 +31,7 @@ try:
         complete_unlock_after_payment,
         create_unlock_payment_link,
         record_proof_of_payment,
-        send_whatsapp_message,
     )
-    from backend.queens_connect.tools.firebase_tools import get_user, get_user_session
-    from backend.queens_connect.menus import get_buttons_for_context
 except ImportError:
     from agent_runner import (
         init_runner,
@@ -47,10 +44,7 @@ except ImportError:
         complete_unlock_after_payment,
         create_unlock_payment_link,
         record_proof_of_payment,
-        send_whatsapp_message,
     )
-    from queens_connect.tools.firebase_tools import get_user, get_user_session
-    from queens_connect.menus import get_buttons_for_context
 
 logging.basicConfig(
     level=logging.INFO,
@@ -347,9 +341,7 @@ async def webhook_twilio_whatsapp(request: Request):
 
     from_ = form_dict.get("From", "")
     to = form_dict.get("To", "")
-    # When user taps a quick-reply button, Twilio sends ButtonPayload (and may send Body with button text)
     body = (form_dict.get("Body") or "").strip()
-    button_payload = (form_dict.get("ButtonPayload") or "").strip()
     num_media = int(form_dict.get("NumMedia") or "0")
 
     # Normalize wa_number: strip whatsapp: prefix
@@ -361,19 +353,16 @@ async def webhook_twilio_whatsapp(request: Request):
             media_type="application/xml",
         )
 
-    # Use button payload as message when user tapped a button so agent sees "Borrow", "Lend", etc.
-    message = button_payload or body
+    # Build message: include text and optional note about attached media
+    message = body
     if num_media > 0 and not message:
         message = "[User sent media]"
-    elif num_media > 0 and message == body:
+    elif num_media > 0:
         message = f"{message} [User also sent {num_media} media attachment(s)]"
     if not message:
         message = "[Empty message]"
 
-    logger.info(
-        "webhook_twilio_whatsapp from=%s to=%s body_len=%d num_media=%d button=%s",
-        wa_number, to, len(body), num_media, bool(button_payload),
-    )
+    logger.info("webhook_twilio_whatsapp from=%s to=%s body_len=%d num_media=%d", wa_number, to, len(body), num_media)
 
     try:
         reply = await run_message_async(
@@ -385,32 +374,6 @@ async def webhook_twilio_whatsapp(request: Request):
         logger.exception("run_message_async failed in Twilio webhook: %s", e)
         reply = "We're having a quick hiccup — try again in a moment."
 
-    # State-based menu: show interactive buttons when appropriate
-    try:
-        user_doc = get_user(wa_number)
-        session_doc = get_user_session(wa_number)
-        state = {"userProfile": user_doc, "userSession": session_doc}
-        menu = get_buttons_for_context(None, state)
-    except Exception as e:
-        logger.warning("get_buttons_for_context failed: %s", e)
-        menu = None
-
-    if menu and menu.get("content_sid"):
-        # Send Content template with buttons via REST; return empty TwiML so we don't send reply twice
-        send_result = send_whatsapp_message(
-            to_wa_number=wa_number,
-            content_sid=menu["content_sid"],
-            content_variables=menu.get("content_variables") or {},
-        )
-        if send_result.get("status") == "success":
-            response = Element("Response")
-            return Response(
-                content='<?xml version="1.0" encoding="UTF-8"?>' + tostring(response, encoding="unicode", method="xml"),
-                media_type="application/xml",
-            )
-        logger.warning("send_whatsapp_message (template) failed: %s", send_result.get("error_message"))
-
-    # No menu or send failed: return reply as plain text TwiML
     return Response(
         content=_twiml_message(reply),
         media_type="application/xml",
