@@ -734,14 +734,47 @@ def fetch_listings_tool(
     limit: int = 10,
 ) -> dict:
     """
-    Fetch marketplace listings from Firestore. Use when the user wants to search or browse listings.
-    query, filters (e.g. location, type), limit. Returns status, results, count.
-    Each result includes: id, title, description, location, type, tags, priceRange (optional), contact (optional), link (optional), ownerUid (creator's WhatsApp number), createdAt.
-    When the user asks for contact details of a listing and the listing has no 'contact' field, you may share the listing creator's WhatsApp number (ownerUid) so they can be reached.
+    Fetch marketplace listings from Firestore. Use when the user wants to search or browse listings,
+    businesses, local services, marketplace, or anything commercial/service-related — treat "businesses",
+    "services", "show me what's in Queenstown", "display all listings", "what's for sale" as the same intent;
+    the user does not need to say "listing". query: search terms; filters (e.g. location for "from Queenstown");
+    limit. Returns status, results, count. Each result includes: id, title, description, location, type, tags,
+    priceRange (optional), contact (optional), link (optional), ownerUid (creator's WhatsApp), createdAt.
+    When the user asks for contact details and the listing has no 'contact' field, you may share ownerUid.
     """
     logger.info("fetch_listings_tool called query=%r limit=%s", (query or "")[:80], limit)
     results = _fetch_docs("listings", query, filters, limit)
     return {"status": "success", "results": results, "count": len(results)}
+
+
+def fetch_experts_or_technicians_tool(
+    query: str = "",
+    filters: Optional[dict] = None,
+    limit: int = 10,
+) -> dict:
+    """
+    Find experts, technicians, or local service providers. Use when the user asks to find an expert,
+    local expert, technician, plumber, electrician, or similar (e.g. "I'd like to find an expert",
+    "looking for a technician", "need a plumber", "local expert").
+    Searches the listings collection first. If no listings are found, also searches community tips (infoBits)
+    and returns those so the user still gets relevant leads. Each result has sourceCollection ("listings" or "infoBits").
+    query: search terms (e.g. "plumber", "electrician", "expert", "technician"); filters, limit as usual.
+    Returns status, results (listings first, then infoBits if listings were empty), count.
+    """
+    logger.info("fetch_experts_or_technicians_tool called query=%r limit=%s", (query or "")[:80], limit)
+    cap = min(int(limit), 20)
+    listings_results = _fetch_docs("listings", query, filters, cap)
+    for r in listings_results:
+        r["sourceCollection"] = "listings"
+    if len(listings_results) == 0:
+        info_results = _fetch_docs("infoBits", query, filters, cap)
+        info_results = [_format_verification_hint(r, "infoBits") for r in info_results]
+        for r in info_results:
+            r["sourceCollection"] = "infoBits"
+        merged = listings_results + info_results
+    else:
+        merged = listings_results
+    return {"status": "success", "results": merged, "count": len(merged)}
 
 
 def fetch_lost_and_found_tool(
@@ -1295,6 +1328,7 @@ fetch_gov_info_tool = FunctionTool(fetch_gov_info_tool)
 fetch_info_bits_tool = FunctionTool(fetch_info_bits_tool)
 fetch_knowledge_share_tool = FunctionTool(fetch_knowledge_share_tool)
 fetch_listings_tool = FunctionTool(fetch_listings_tool)
+fetch_experts_or_technicians_tool = FunctionTool(fetch_experts_or_technicians_tool)
 fetch_lost_and_found_tool = FunctionTool(fetch_lost_and_found_tool)
 fetch_news_tool = FunctionTool(fetch_news_tool)
 fetch_places_tool = FunctionTool(fetch_places_tool)

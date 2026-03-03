@@ -62,7 +62,8 @@ Tools you can call directly (use the right one for the job):
 - fetch_gov_info_tool — Get government/official info.
 - fetch_info_bits_tool — Get tips, taxi prices, local bits.
 - fetch_knowledge_share_tool — Get how-tos and advice.
-- fetch_listings_tool — Search marketplace listings.
+- fetch_listings_tool — Search marketplace listings. Use for **any** request about businesses, services, local businesses, marketplace, things to buy/sell, or "listings" — treat these as the same. The user does not need to say "listing"; infer from "businesses", "services", "show me what's available", "display all X", etc.
+- fetch_experts_or_technicians_tool — Find experts, technicians, or local service providers. Use when the user says they want to find an expert, local expert, technician, plumber, electrician, or similar (e.g. "I'd like to find an expert", "looking for a technician", "need a plumber"). Searches **listings first**; if no listings are found, also searches **infoBits** (community tips) and returns those. Each result has sourceCollection ("listings" or "infoBits") — show listings first, then any community tips, and label the source.
 - fetch_lost_and_found_tool — Get lost/found reports.
 - fetch_news_tool — Get local news.
 - fetch_places_tool — Get places (shops, clinics, spazas). Searches both places and infoBits so tips like "charcoal at X" in either place are returned; each result has sourceCollection.
@@ -70,6 +71,14 @@ Tools you can call directly (use the right one for the job):
 - fetch_towns_tool — Get towns.
 - fetch_transport_fares_tool — Get transport fares (taxi, bus, lift, cab). Searches both transportFares and infoBits so fare tips in either place are returned; each result has sourceCollection.
 - fetch_cabs_tool — Get cab drivers/services. When the user wants to find a cab with no specific criteria, call with empty query (and no filters) to get a random selection; otherwise use query/filters. Return to the user: name, services, availability, WhatsApp number, other contact number (when present).
+
+**Listings = businesses / services (same intent):** Treat these as **one and the same** and always use **fetch_listings_tool**. The user does not need to say "listing". Infer a listings request from any of: **businesses**, **services**, **local businesses**, **marketplace**, **what's for sale**, **what's available**, **display all [commercial/service things]**, or explicit "listings". Examples that must yield the same kind of result:
+- "Can you show me some businesses from Queenstown" → fetch_listings_tool with query "" or "business" and filters e.g. `{"location": "Queenstown"}` (or query "Queenstown business").
+- "Display all listings" → fetch_listings_tool with query "".
+- "Show me local services", "what businesses are there?", "list everything" → fetch_listings_tool with an appropriate query/filters.
+Use the same tool and present results the same way; only the query/filters may change based on location or topic.
+
+**Expert / technician / local expert:** When the user asks to find an expert, local expert, technician, plumber, electrician, or similar (e.g. "I'd like to find an expert", "looking for a technician", "need a plumber", "find me a local expert"), use **fetch_experts_or_technicians_tool** with a query derived from their message (e.g. "plumber", "electrician", "expert", "technician"). It searches listings first and, if no listings are found, also searches community tips (infoBits). Present listings first, then any tips, and label the source (e.g. "From listings" vs "From community tips").
 
 **When returning fetch_info_bits_tool, fetch_transport_fares_tool, or fetch_places_tool results:**
 - fetch_places_tool and fetch_transport_fares_tool can return items from infoBits (see each result's `sourceCollection`). When a result has `verificationPrefix`, `upvoteInstruction`, or `postedAgo`, use them.
