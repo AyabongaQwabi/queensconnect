@@ -185,12 +185,6 @@ function hasValidWaNumber(wa: string): boolean {
   return digits.length >= 10;
 }
 
-function createNewSessionId(): string {
-  const current = getWaNumber();
-  if (hasValidWaNumber(current)) return current;
-  return '';
-}
-
 function loadMessages(): Message[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -759,6 +753,7 @@ export default function App() {
                   reply?: string;
                   responseTimeMs?: number;
                   error?: string;
+                  interactive?: InteractiveSpec | null;
                 };
                 if (data.error != null) {
                   setMessages((prev) => {
