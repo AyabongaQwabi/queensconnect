@@ -3,11 +3,12 @@ import type { Components } from "react-markdown"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
-type ChatMessageProps = {
+export type ChatMessageProps = {
   role: "user" | "assistant"
   content: string
   responseTimeMs?: number
   quickActions?: string[]
+  adminQuickActions?: string[]
   onQuickAction?: (action: string) => void
   onRetry?: (content: string) => void
 }
@@ -37,7 +38,7 @@ const markdownComponents: Components = {
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
 }
 
-export function ChatMessage({ role, content, responseTimeMs, quickActions = [], onQuickAction, onRetry }: ChatMessageProps) {
+export function ChatMessage({ role, content, responseTimeMs, quickActions = [], adminQuickActions, onQuickAction, onRetry }: ChatMessageProps) {
   const isUser = role === "user"
   const [menuOpen, setMenuOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -91,7 +92,8 @@ export function ChatMessage({ role, content, responseTimeMs, quickActions = [], 
   }
 
   // Assistant: render as markdown (bold, lists, links, etc.) with elegant border and shadow
-  const showMenu = quickActions.length > 0 && onQuickAction
+  const hasAdminActions = adminQuickActions != null && adminQuickActions.length > 0
+  const showMenu = (quickActions.length > 0 || hasAdminActions) && onQuickAction
   return (
     <div className="w-full">
       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -126,6 +128,26 @@ export function ChatMessage({ role, content, responseTimeMs, quickActions = [], 
                     {action}
                   </li>
                 ))}
+                {hasAdminActions && (
+                  <>
+                    <li className="px-3 py-1.5 mt-1 border-t border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Admin
+                    </li>
+                    {adminQuickActions!.map((action) => (
+                      <li
+                        key={action}
+                        role="option"
+                        onClick={() => {
+                          onQuickAction(action)
+                          setMenuOpen(false)
+                        }}
+                        className="px-3 py-2 text-sm text-gray-800 hover:bg-violet-50 cursor-pointer"
+                      >
+                        {action}
+                      </li>
+                    ))}
+                  </>
+                )}
               </ul>
             )}
           </div>

@@ -20,25 +20,36 @@ const ERROR_MSG =
 const QUICK_ACTIONS = [
   'Get a loan',
   'View Taxi prices',
-  'Share Taxi price',
   'Loan a person',
   'Find some info',
-  'Share some info',
   'Open a stokvel',
   'Join a stokvel',
-  'Create a Listing',
   'Find a Listing',
-  'Add place',
   'Find place',
   'Find lost item',
   'List lost item',
   'See events',
-  'List event',
   'File complaint',
   'List complaints',
-  'Add a cab driver',
   'Find a cab',
 ];
+
+/** Item-creation actions shown only when admin WA number is logged in */
+const ADMIN_QUICK_ACTIONS = [
+  'Share Taxi price',
+  'Share some info',
+  'Create a Listing',
+  'Add place',
+  'List event',
+  'Add a cab driver',
+];
+
+const ADMIN_WA_NUMBER = '227603116777';
+
+function isAdminUser(waNumber: string): boolean {
+  const digits = (waNumber || '').replace(/\D/g, '');
+  return digits === ADMIN_WA_NUMBER;
+}
 
 const QUICK_ACTION_PHRASES: Record<string, string> = {
   'Get a loan': 'I’d like to get a loan.',
@@ -1190,6 +1201,7 @@ export default function App() {
                       content={msg.content}
                       responseTimeMs={msg.responseTimeMs}
                       quickActions={QUICK_ACTIONS}
+                      adminQuickActions={isAdminUser(waNumber) ? ADMIN_QUICK_ACTIONS : undefined}
                       onQuickAction={handleQuickAction}
                       onRetry={msg.role === 'user' ? () => handleSend(msg.content) : undefined}
                     />
