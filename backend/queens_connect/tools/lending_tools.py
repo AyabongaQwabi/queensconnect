@@ -440,27 +440,67 @@ def send_whatsapp_twilio(
     - content_sid: Twilio ContentSid for approved WhatsApp template
     - content_variables: template variables as {"1": "...", "2": "..."}
     """
+    return send_whatsapp_message(
+        to_wa_number=to_wa_number,
+        content_sid=content_sid,
+        content_variables=content_variables,
+    )
+
+
+def send_whatsapp_message(
+    to_wa_number: str,
+    body: Optional[str] = None,
+    content_sid: Optional[str] = None,
+    content_variables: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """
+    Send a WhatsApp message via Twilio: either plain text or a Content template.
+
+    - to_wa_number: bare MSISDN with leading + (e.g. +2776...)
+    - body: plain text message (use when content_sid is None)
+    - content_sid: Twilio ContentSid for interactive template (quick reply buttons)
+    - content_variables: template variables as {"1": "...", "2": "..."} when using content_sid
+
+    When content_sid is set, sends the template and ignores body. Otherwise sends body.
+    For Content templates, From must be a Messaging Service SID (MG...) that contains a WhatsApp sender.
+    """
     account_sid = os.environ.get("TWILIO_ACCOUNT_SID") or ""
     auth_token = os.environ.get("TWILIO_AUTH_TOKEN") or ""
-    from_whatsapp = os.environ.get("TWILIO_WHATSAPP_FROM") or ""
-    if not account_sid or not auth_token or not from_whatsapp or not content_sid:
-        logger.warning("send_whatsapp_twilio missing config (SID/token/from/content_sid)")
+    from_whatsapp = (
+        os.environ.get("TWILIO_MESSAGING_SERVICE_SID")
+        or os.environ.get("TWILIO_WHATSAPP_FROM")
+        or ""
+    ).strip()
+    if not account_sid or not auth_token or not from_whatsapp:
+        logger.warning("send_whatsapp_message missing config (SID/token/from)")
         return {"status": "error", "error_message": "Twilio WhatsApp not configured"}
 
     url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json"
-    data = {
-        "To": f"whatsapp:{to_wa_number}",
-        "From": from_whatsapp,
-        "ContentSid": content_sid,
-        "ContentVariables": json.dumps(content_variables),
-    }
+    to_addr = f"whatsapp:{to_wa_number}" if not to_wa_number.startswith("whatsapp:") else to_wa_number
+
+    if content_sid and content_variables is not None:
+        data = {
+            "To": to_addr,
+            "From": from_whatsapp,
+            "ContentSid": content_sid,
+            "ContentVariables": json.dumps(content_variables),
+        }
+    else:
+        if not body:
+            return {"status": "error", "error_message": "body or content_sid required"}
+        data = {"To": to_addr, "From": from_whatsapp, "Body": body}
+
     try:
         res = requests.post(url, data=data, auth=(account_sid, auth_token), timeout=15)
         res.raise_for_status()
-        logger.info("send_whatsapp_twilio ok to=%s content_sid=%s", to_wa_number[:6] + "***", content_sid)
+        logger.info(
+            "send_whatsapp_message ok to=%s %s",
+            to_wa_number[:6] + "***" if len(to_wa_number) > 6 else "***",
+            "content_sid=" + content_sid if content_sid else "body",
+        )
         return {"status": "success"}
     except requests.RequestException as e:
-        logger.exception("send_whatsapp_twilio failed: %s", e)
+        logger.exception("send_whatsapp_message failed: %s", e)
         return {"status": "error", "error_message": str(e)}
 
 
