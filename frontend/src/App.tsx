@@ -9,10 +9,10 @@ const WA_NUMBER_KEY = 'queens_connect_wa_number';
 const SAVED_SESSIONS_KEY = 'queens_connect_saved_sessions';
 const LANGUAGE_PREF_KEY = 'queens_connect_language_pref';
 const WELCOME =
-  "**Testing area** — This is not the real app.\n\n" +
-  "• **Verifications** are not real: you can just reply \"done\" without clicking any link.\n" +
-  "• **Payments**: you will need to click the link to our test environment when we send it.\n\n" +
-  "—\n\n" +
+  '**Testing area** — This is not the real app.\n\n' +
+  '• **Verifications** are not real: you can just reply "done" without clicking any link.\n' +
+  '• **Payments**: you will need to click the link to our test environment when we send it.\n\n' +
+  '—\n\n' +
   "Hi! 👋 I'm Queens Connect. Ask me about local listings, taxi fares, events, lost & found, news, or anything in your area. What would you like to do? 😊";
 const ERROR_MSG =
   'Something went wrong on our side — please try again in a moment.';
@@ -44,7 +44,7 @@ const ADMIN_QUICK_ACTIONS = [
   'Add a cab driver',
 ];
 
-const ADMIN_WA_NUMBER = '227603116777';
+const ADMIN_WA_NUMBER = '27603116777';
 
 function isAdminUser(waNumber: string): boolean {
   const digits = (waNumber || '').replace(/\D/g, '');
@@ -1201,9 +1201,15 @@ export default function App() {
                       content={msg.content}
                       responseTimeMs={msg.responseTimeMs}
                       quickActions={QUICK_ACTIONS}
-                      adminQuickActions={isAdminUser(waNumber) ? ADMIN_QUICK_ACTIONS : undefined}
+                      adminQuickActions={
+                        isAdminUser(waNumber) ? ADMIN_QUICK_ACTIONS : undefined
+                      }
                       onQuickAction={handleQuickAction}
-                      onRetry={msg.role === 'user' ? () => handleSend(msg.content) : undefined}
+                      onRetry={
+                        msg.role === 'user'
+                          ? () => handleSend(msg.content)
+                          : undefined
+                      }
                     />
                     {msg.role === 'assistant' &&
                       msg.interactive &&
