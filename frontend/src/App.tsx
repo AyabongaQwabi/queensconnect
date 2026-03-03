@@ -13,31 +13,31 @@ const WELCOME =
   '• **Verifications** are not real: you can just reply "done" without clicking any link.\n' +
   '• **Payments**: you will need to click the link to our test environment when we send it.\n\n' +
   '—\n\n' +
-  "Hi! 👋 I'm Queens Connect. Ask me about local listings, taxi fares, events, lost & found, news, or anything in your area. What would you like to do? 😊";
+  "Hi! 👋 I'm Queens Connect. Ask me about local businesses, cabs, events, or anything in your area. What would you like to do? 😊";
 const ERROR_MSG =
   'Something went wrong on our side — please try again in a moment.';
 
 const QUICK_ACTIONS = [
+  'Find a cab',
   'Get a loan',
-  'View Taxi prices',
   'Loan a person',
-  'Find some info',
   'Open a stokvel',
   'Join a stokvel',
-  'Find a Listing',
-  'Find place',
+  'Find an expert',
+  'Find some info',
   'Find lost item',
-  'List lost item',
+  'Add a lost item',
   'See events',
+  'Add an event',
+  'View Taxi prices',
   'File complaint',
   'List complaints',
-  'Find a cab',
 ];
 
 /** Item-creation actions shown only when admin WA number is logged in */
 const ADMIN_QUICK_ACTIONS = [
-  'Share Taxi price',
-  'Share some info',
+  'Add taxi price',
+  'Add info',
   'Create a Listing',
   'Add place',
   'List event',
@@ -54,20 +54,21 @@ function isAdminUser(waNumber: string): boolean {
 const QUICK_ACTION_PHRASES: Record<string, string> = {
   'Get a loan': 'I’d like to get a loan.',
   'View Taxi prices': 'I’d like to see local taxi prices.',
-  'Share Taxi price': 'I’d like to share local taxi prices.',
+  'Add taxi price': 'I’d like to share local taxi prices.',
   'Loan a person': 'I’d like to loan money to someone.',
   'Find some info': 'I’d like to find some community info.',
-  'Share some info': 'I’d like to share some community info.',
+  'Add info': 'I’d like to share some community info.',
   'Open a stokvel': 'I’d like to open a stokvel.',
   'Join a stokvel': 'I’d like to join a stokvel.',
   'Create a Listing': 'I’d like to create a community listing.',
-  'Find a Listing': 'I’d like to find a community listing.',
+  'Find an expert':
+    'I’d like to find a listing for a local expert or technician',
   'Add place': "I'd like to add a place.",
   'Find place': "I'd like to find a place.",
   'Find lost item': 'I’d like to find a lost item.',
-  'List lost item': 'I’d like to list a lost item.',
+  'Add a lost item': 'I’d like to add a lost item.',
   'See events': 'I’d like to see community events.',
-  'List event': 'I’d like to list a community event.',
+  'Add an event': 'I’d like to add a community event.',
   'File complaint': 'I’d like to file a community complaint.',
   'List complaints': 'I’d like to see complaints I’ve filed.',
   'Add a cab driver': "I'd like to add a cab driver.",
