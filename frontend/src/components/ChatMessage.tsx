@@ -9,6 +9,7 @@ type ChatMessageProps = {
   responseTimeMs?: number
   quickActions?: string[]
   onQuickAction?: (action: string) => void
+  onRetry?: (content: string) => void
 }
 
 function formatResponseTime(ms: number): string {
@@ -36,9 +37,10 @@ const markdownComponents: Components = {
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
 }
 
-export function ChatMessage({ role, content, responseTimeMs, quickActions = [], onQuickAction }: ChatMessageProps) {
+export function ChatMessage({ role, content, responseTimeMs, quickActions = [], onQuickAction, onRetry }: ChatMessageProps) {
   const isUser = role === "user"
   const [menuOpen, setMenuOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -52,14 +54,38 @@ export function ChatMessage({ role, content, responseTimeMs, quickActions = [], 
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [menuOpen])
 
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // ignore
+    }
+  }
+
   if (isUser) {
     return (
-      <div className="flex w-full justify-end">
+      <div className="flex w-full justify-end flex-col items-end gap-1">
         <div className="max-w-[85%] rounded-2xl rounded-br-md bg-gray-100 px-4 py-2.5">
           <p className="text-sm sm:text-base whitespace-pre-wrap break-words text-gray-900">
             {content}
           </p>
         </div>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={() => onRetry(content)}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-200 hover:text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400"
+            title="Resend message"
+            aria-label="Resend message"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Retry
+          </button>
+        )}
       </div>
     )
   }
@@ -85,7 +111,7 @@ export function ChatMessage({ role, content, responseTimeMs, quickActions = [], 
             {menuOpen && (
               <ul
                 role="listbox"
-                className="absolute left-0 top-full mt-1 z-20 min-w-[200px] max-h-[70vh] overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg ring-1 ring-black/5"
+                className="absolute left-0 top-full mt-1 z-20 min-w-[200px] max-h-[260px] overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg ring-1 ring-black/5"
               >
                 {quickActions.map((action) => (
                   <li
@@ -113,6 +139,29 @@ export function ChatMessage({ role, content, responseTimeMs, quickActions = [], 
       <div className="rounded-xl border border-violet-200/80 bg-gradient-to-br from-white to-violet-50/30 px-4 py-3 shadow-sm shadow-violet-200/40 ring-1 ring-violet-100/50 text-gray-800 break-words max-w-none [&_a]:text-blue-600 [&_a]:underline [&_a]:hover:text-blue-800 [&_a]:cursor-pointer [&_a]:break-all">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{content}</ReactMarkdown>
       </div>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="mt-1 flex items-center gap-1 rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-200 hover:text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400"
+        title={copied ? "Copied!" : "Copy message"}
+        aria-label={copied ? "Copied!" : "Copy message"}
+      >
+        {copied ? (
+          <>
+            <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Copied!
+          </>
+        ) : (
+          <>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h2m0 0h2a2 2 0 012 2v2m0 6v2a2 2 0 01-2 2h-2m-4 0H6m0 0h2a2 2 0 002-2v-2m0 0V6a2 2 0 012-2h2m0 0h2a2 2 0 012 2v2" />
+            </svg>
+            Copy
+          </>
+        )}
+      </button>
     </div>
   )
 }

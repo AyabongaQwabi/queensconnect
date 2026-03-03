@@ -9,6 +9,10 @@ const WA_NUMBER_KEY = 'queens_connect_wa_number';
 const SAVED_SESSIONS_KEY = 'queens_connect_saved_sessions';
 const LANGUAGE_PREF_KEY = 'queens_connect_language_pref';
 const WELCOME =
+  "**Testing area** — This is not the real app.\n\n" +
+  "• **Verifications** are not real: you can just reply \"done\" without clicking any link.\n" +
+  "• **Payments**: you will need to click the link to our test environment when we send it.\n\n" +
+  "—\n\n" +
   "Hi! 👋 I'm Queens Connect. Ask me about local listings, taxi fares, events, lost & found, news, or anything in your area. What would you like to do? 😊";
 const ERROR_MSG =
   'Something went wrong on our side — please try again in a moment.';
@@ -24,6 +28,8 @@ const QUICK_ACTIONS = [
   'Join a stokvel',
   'Create a Listing',
   'Find a Listing',
+  'Add place',
+  'Find place',
   'Find lost item',
   'List lost item',
   'See events',
@@ -43,6 +49,8 @@ const QUICK_ACTION_PHRASES: Record<string, string> = {
   'Join a stokvel': 'I’d like to join a stokvel.',
   'Create a Listing': 'I’d like to create a community listing.',
   'Find a Listing': 'I’d like to find a community listing.',
+  'Add place': "I'd like to add a place.",
+  'Find place': "I'd like to find a place.",
   'Find lost item': 'I’d like to find a lost item.',
   'List lost item': 'I’d like to list a lost item.',
   'See events': 'I’d like to see community events.',
@@ -1179,6 +1187,7 @@ export default function App() {
                       responseTimeMs={msg.responseTimeMs}
                       quickActions={QUICK_ACTIONS}
                       onQuickAction={handleQuickAction}
+                      onRetry={msg.role === 'user' ? () => handleSend(msg.content) : undefined}
                     />
                     {msg.role === 'assistant' &&
                       msg.interactive &&
