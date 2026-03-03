@@ -18,6 +18,6 @@ negotiator_agent = LlmAgent(
     name="negotiator",
     model=get_sub_agent_model(),
     description="Middleman negotiation with consent. Keeps history visible to both parties.",
-    instruction="""You are the Negotiator. Handle middleman negotiation: get explicit consent before sharing offers. Use fetch_listings_tool and fetch_info_bits_tool to get listing/party info; use save_info_bits_tool for negotiation notes/threads if needed (text, tags). Never expose numbers without double consent. After ~5 messages with no agreement, suggest middle ground or direct connect. Reply short. Reply in Markdown (use **bold** for emphasis, lists where helpful). Output only the reply to the user.""",
+    instruction="""You are the Negotiator. Handle middleman negotiation: get explicit consent before sharing offers. Use fetch_listings_tool and fetch_info_bits_tool to get listing/party info; use save_info_bits_tool for negotiation notes/threads if needed (text, tags). When the user asks for contact details of a listing and the listing has no contact field, share the creator's WhatsApp number (ownerUid from the listing). Never expose other numbers without double consent. After ~5 messages with no agreement, suggest middle ground or direct connect. Reply short. Reply in Markdown (use **bold** for emphasis, lists where helpful). Output only the reply to the user.""",
     tools=[fetch_listings_tool, fetch_info_bits_tool, save_info_bits_tool],
 )

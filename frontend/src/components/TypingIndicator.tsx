@@ -1,21 +1,24 @@
 export function TypingIndicator() {
   return (
     <div className="w-full">
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-sm font-semibold text-gray-900">Queens Connect</span>
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+          Queens Connect
+        </span>
+        <span className="text-[10px] text-gray-400">is typing</span>
       </div>
-      <div className="flex gap-1">
+      <div className="flex gap-0.5">
         <span
-          className="w-2 h-2 rounded-full bg-[#7c3aed]/60 animate-bounce"
+          className="w-1.5 h-1.5 rounded-full bg-gray-400/70 animate-bounce"
           style={{ animationDelay: "0ms" }}
         />
         <span
-          className="w-2 h-2 rounded-full bg-[#7c3aed]/60 animate-bounce"
-          style={{ animationDelay: "150ms" }}
+          className="w-1.5 h-1.5 rounded-full bg-gray-400/70 animate-bounce"
+          style={{ animationDelay: "120ms" }}
         />
         <span
-          className="w-2 h-2 rounded-full bg-[#7c3aed]/60 animate-bounce"
-          style={{ animationDelay: "300ms" }}
+          className="w-1.5 h-1.5 rounded-full bg-gray-400/70 animate-bounce"
+          style={{ animationDelay: "240ms" }}
         />
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from "react"
 import type { Components } from "react-markdown"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -6,6 +7,8 @@ type ChatMessageProps = {
   role: "user" | "assistant"
   content: string
   responseTimeMs?: number
+  quickActions?: string[]
+  onQuickAction?: (action: string) => void
 }
 
 function formatResponseTime(ms: number): string {
@@ -33,8 +36,21 @@ const markdownComponents: Components = {
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
 }
 
-export function ChatMessage({ role, content, responseTimeMs }: ChatMessageProps) {
+export function ChatMessage({ role, content, responseTimeMs, quickActions = [], onQuickAction }: ChatMessageProps) {
   const isUser = role === "user"
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [menuOpen])
 
   if (isUser) {
     return (
@@ -48,18 +64,53 @@ export function ChatMessage({ role, content, responseTimeMs }: ChatMessageProps)
     )
   }
 
-  // Assistant: render as markdown (bold, lists, links, etc.)
+  // Assistant: render as markdown (bold, lists, links, etc.) with elegant border and shadow
+  const showMenu = quickActions.length > 0 && onQuickAction
   return (
     <div className="w-full">
-      <div className="flex items-center gap-2 mb-1.5">
+      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
         <span className="text-sm font-semibold text-gray-900">Queens Connect</span>
+        {showMenu && (
+          <div className="relative shrink-0" ref={menuRef}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-1"
+              aria-expanded={menuOpen}
+              aria-haspopup="listbox"
+            >
+              Menu
+              <span className="text-gray-400">{menuOpen ? "▲" : "▼"}</span>
+            </button>
+            {menuOpen && (
+              <ul
+                role="listbox"
+                className="absolute left-0 top-full mt-1 z-20 min-w-[200px] max-h-[70vh] overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg ring-1 ring-black/5"
+              >
+                {quickActions.map((action) => (
+                  <li
+                    key={action}
+                    role="option"
+                    onClick={() => {
+                      onQuickAction(action)
+                      setMenuOpen(false)
+                    }}
+                    className="px-3 py-2 text-sm text-gray-800 hover:bg-violet-50 cursor-pointer"
+                  >
+                    {action}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
         {responseTimeMs != null && (
           <span className="text-xs text-gray-400" title="Response time">
             {formatResponseTime(responseTimeMs)}
           </span>
         )}
       </div>
-      <div className="text-gray-800 break-words max-w-none [&_a]:text-blue-600 [&_a]:underline [&_a]:hover:text-blue-800 [&_a]:cursor-pointer [&_a]:break-all">
+      <div className="rounded-xl border border-violet-200/80 bg-gradient-to-br from-white to-violet-50/30 px-4 py-3 shadow-sm shadow-violet-200/40 ring-1 ring-violet-100/50 text-gray-800 break-words max-w-none [&_a]:text-blue-600 [&_a]:underline [&_a]:hover:text-blue-800 [&_a]:cursor-pointer [&_a]:break-all">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{content}</ReactMarkdown>
       </div>
     </div>

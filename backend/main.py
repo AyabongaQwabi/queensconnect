@@ -25,6 +25,12 @@ try:
         run_message_async,
         run_message_async_raw,
     )
+    from backend.queens_connect.tools import (
+        get_user,
+        get_user_session,
+        append_web_chat_message,
+        get_web_chat_messages,
+    )
     from backend.queens_connect.tools.lending_tools import (
         create_lender_profile,
         create_borrower_profile,
@@ -32,11 +38,18 @@ try:
         create_unlock_payment_link,
         record_proof_of_payment,
     )
+    from backend.queens_connect.web_ui_state import get_interactive_for_web
 except ImportError:
     from agent_runner import (
         init_runner,
         run_message_async,
         run_message_async_raw,
+    )
+    from queens_connect.tools import (
+        get_user,
+        get_user_session,
+        append_web_chat_message,
+        get_web_chat_messages,
     )
     from queens_connect.tools.lending_tools import (
         create_lender_profile,
@@ -45,6 +58,7 @@ except ImportError:
         create_unlock_payment_link,
         record_proof_of_payment,
     )
+    from queens_connect.web_ui_state import get_interactive_for_web
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,9 +74,23 @@ class ChatRequest(BaseModel):
     language_pref: str = Field(default="english", description="Language preference")
 
 
+class InteractiveOption(BaseModel):
+    value: str
+    label: str
+
+
+class InteractiveSpec(BaseModel):
+    type: str  # "buttons" | "dropdown" | "radio" | "checkboxes"
+    name: str
+    label: str | None = None
+    options: list[InteractiveOption]
+    submitLabel: str | None = None
+
+
 class ChatResponse(BaseModel):
     reply: str
     error: str | None = None
+    interactive: InteractiveSpec | None = None
 
 
 class CreateLenderRequest(BaseModel):
@@ -101,7 +129,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://homiest-simonne-unofficious.ngrok-free.dev",
+        "https://qwabi.co.za",
         "https://qwabi.co.za",
         "https://www.qwabi.co.za",
     ],
@@ -125,28 +153,63 @@ async def health():
     return {"status": "ok"}
 
 
+def _get_interactive_spec(wa_number: str) -> InteractiveSpec | None:
+    """Get optional interactive UI spec for web from session state. Returns None on error."""
+    try:
+        user_doc = get_user(wa_number)
+        session_doc = get_user_session(wa_number)
+        state = {"userProfile": user_doc, "userSession": session_doc}
+        spec = get_interactive_for_web(state)
+        if not spec:
+            return None
+        return InteractiveSpec(
+            type=spec["type"],
+            name=spec["name"],
+            label=spec.get("label"),
+            options=[InteractiveOption(value=o["value"], label=o["label"]) for o in spec["options"]],
+            submitLabel=spec.get("submitLabel"),
+        )
+    except Exception as e:
+        logger.warning("get_interactive_for_web failed: %s", e)
+        return None
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """Process one chat message and return the agent reply."""
+    """Process one chat message and return the agent reply and optional interactive spec for web UI."""
     logger.info("chat wa_number=%s message_len=%d", request.wa_number, len(request.message))
     try:
+        append_web_chat_message(
+            request.wa_number,
+            "user",
+            request.message.strip(),
+        )
         reply = await run_message_async(
             wa_number=request.wa_number,
             message=request.message.strip(),
             language_pref=request.language_pref,
         )
-        return ChatResponse(reply=reply, error=None)
+        interactive = _get_interactive_spec(request.wa_number)
+        append_web_chat_message(
+            request.wa_number,
+            "bot",
+            reply,
+            metadata={"interactive": interactive.model_dump()} if interactive else None,
+        )
+        return ChatResponse(reply=reply, error=None, interactive=interactive)
     except Exception as e:
         logger.exception("chat failed: %s", e)
         return ChatResponse(
             reply="We apologise for the inconvenience. We are experiencing technical difficulties. Please try again in a few minutes.",
             error=str(e),
+            interactive=None,
         )
 
 
 async def _stream_chat_generator(wa_number: str, message: str, language_pref: str):
-    """Run pipeline to get raw_reply, then stream it via SSE. Final event includes reply and responseTimeMs."""
+    """Run pipeline to get raw_reply, then stream it via SSE. Final event includes reply, responseTimeMs, and optional interactive."""
     start = time.perf_counter()
+    append_web_chat_message(wa_number, "user", message)
     try:
         raw_reply = await run_message_async_raw(
             wa_number=wa_number,
@@ -159,7 +222,17 @@ async def _stream_chat_generator(wa_number: str, message: str, language_pref: st
         return
     yield f"data: {json.dumps({'text': raw_reply})}\n\n"
     elapsed_ms = int((time.perf_counter() - start) * 1000)
-    yield f"data: {json.dumps({'done': True, 'reply': raw_reply, 'responseTimeMs': elapsed_ms})}\n\n"
+    interactive = _get_interactive_spec(wa_number)
+    append_web_chat_message(
+        wa_number,
+        "bot",
+        raw_reply,
+        metadata={"interactive": interactive.model_dump()} if interactive else None,
+    )
+    done_payload = {"done": True, "reply": raw_reply, "responseTimeMs": elapsed_ms}
+    if interactive is not None:
+        done_payload["interactive"] = interactive.model_dump()
+    yield f"data: {json.dumps(done_payload)}\n\n"
 
 
 @app.post("/admin/lenders")
@@ -283,6 +356,20 @@ async def ikhokha_callback(request: Request):
     return {"status": "ok"}
 
 
+@app.get("/chats/{wa_number}/messages")
+async def get_chat_messages(wa_number: str):
+    """Return persisted messages for the given wa_number (web chat). Ordered oldest first."""
+    try:
+        result = get_web_chat_messages(wa_number.strip(), limit=200)
+        if result.get("status") == "error":
+            return {"messages": [], "error": result.get("error_message", "Unknown error")}
+        messages = result.get("messages", [])
+        return {"messages": messages}
+    except Exception as e:
+        logger.exception("get_chat_messages failed: %s", e)
+        return {"messages": [], "error": str(e)}
+
+
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
     """Run pipeline once, then stream the raw reply via Server-Sent Events."""
@@ -317,7 +404,8 @@ async def webhook_twilio_whatsapp(request: Request):
     Incoming Twilio WhatsApp webhook.
 
     Twilio POSTs application/x-www-form-urlencoded with From, To, Body, NumMedia, MediaUrl0, etc.
-    We run the message through the agent and return TwiML with the reply.
+    We run the message through the agent and return TwiML with the reply text only (no interactive
+    templates or buttons). Structured text menus (numbered/labelled options) come from agent prompts.
     See: https://www.twilio.com/docs/whatsapp/tutorial/send-and-receive-media-messages-whatsapp-nodejs
     """
     # Parse form (Twilio sends application/x-www-form-urlencoded)

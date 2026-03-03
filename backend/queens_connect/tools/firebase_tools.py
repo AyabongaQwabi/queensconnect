@@ -588,6 +588,8 @@ def fetch_listings_tool(
     """
     Fetch marketplace listings from Firestore. Use when the user wants to search or browse listings.
     query, filters (e.g. location, type), limit. Returns status, results, count.
+    Each result includes: id, title, description, location, type, tags, priceRange (optional), contact (optional), link (optional), ownerUid (creator's WhatsApp number), createdAt.
+    When the user asks for contact details of a listing and the listing has no 'contact' field, you may share the listing creator's WhatsApp number (ownerUid) so they can be reached.
     """
     logger.info("fetch_listings_tool called query=%r limit=%s", (query or "")[:80], limit)
     results = _fetch_docs("listings", query, filters, limit)
@@ -925,6 +927,106 @@ def sync_user_to_session_state(wa_number: str) -> dict:
         "userProfile": user_out,
         "userSession": session_out,
     }
+
+
+# ---------- Web chat persistence (chats/{wa_number}, messages subcollection) ----------
+def upsert_web_chat(wa_number: str, channel: str = "web") -> dict:
+    """Create or update chat doc for wa_number. Sets lastActiveAt. Used before appending messages."""
+    wa = _normalize_wa_number(wa_number)
+    if not wa:
+        return {"status": "error", "error_message": "wa_number required"}
+    try:
+        from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+    except ImportError:
+        from google.cloud.firestore import SERVER_TIMESTAMP
+    try:
+        db = _get_db()
+        ref = db.collection("chats").document(wa)
+        ref.set(
+            {
+                "waNumber": wa,
+                "channel": channel,
+                "lastActiveAt": SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+        doc = ref.get()
+        if doc.exists and "createdAt" not in (doc.to_dict() or {}):
+            ref.update({"createdAt": SERVER_TIMESTAMP})
+        return {"status": "success"}
+    except Exception as e:
+        logger.exception("upsert_web_chat failed: %s", e)
+        return {"status": "error", "error_message": str(e)}
+
+
+def append_web_chat_message(
+    wa_number: str,
+    sender: str,
+    text: str,
+    metadata: Optional[dict] = None,
+) -> dict:
+    """Append one message to chats/{wa_number}/messages. sender is 'user' or 'bot'."""
+    wa = _normalize_wa_number(wa_number)
+    if not wa:
+        return {"status": "error", "error_message": "wa_number required"}
+    if sender not in ("user", "bot"):
+        return {"status": "error", "error_message": "sender must be 'user' or 'bot'"}
+    try:
+        from google.cloud.firestore_v1 import SERVER_TIMESTAMP
+    except ImportError:
+        from google.cloud.firestore import SERVER_TIMESTAMP
+    try:
+        upsert_web_chat(wa_number)
+        db = _get_db()
+        col = db.collection("chats").document(wa).collection("messages")
+        doc_ref = col.document()
+        doc_ref.set(
+            {
+                "sender": sender,
+                "text": text,
+                "timestamp": SERVER_TIMESTAMP,
+                **({"metadata": metadata} if metadata else {}),
+            }
+        )
+        return {"status": "success", "id": doc_ref.id}
+    except Exception as e:
+        logger.exception("append_web_chat_message failed: %s", e)
+        return {"status": "error", "error_message": str(e)}
+
+
+def get_web_chat_messages(wa_number: str, limit: int = 200) -> dict:
+    """Return messages for chats/{wa_number}, ordered by timestamp ascending."""
+    wa = _normalize_wa_number(wa_number)
+    if not wa:
+        return {"status": "error", "error_message": "wa_number required", "messages": []}
+    try:
+        from google.cloud.firestore_v1.query import Query
+        _DIR_DESC = Query.DESCENDING
+    except ImportError:
+        _DIR_DESC = "DESCENDING"
+    try:
+        db = _get_db()
+        ref = db.collection("chats").document(wa).collection("messages")
+        docs = ref.order_by("timestamp", direction=_DIR_DESC).limit(limit).get()
+        messages = []
+        for doc in reversed(docs):
+            d = doc.to_dict() or {}
+            ts = d.get("timestamp")
+            if hasattr(ts, "isoformat"):
+                ts = ts.isoformat()
+            messages.append(
+                {
+                    "id": doc.id,
+                    "sender": d.get("sender", "bot"),
+                    "text": d.get("text", ""),
+                    "timestamp": ts,
+                    "metadata": d.get("metadata"),
+                }
+            )
+        return {"status": "success", "messages": messages}
+    except Exception as e:
+        logger.exception("get_web_chat_messages failed: %s", e)
+        return {"status": "error", "error_message": str(e), "messages": []}
 
 
 # ---------- Wrap as ADK FunctionTools (user/session tools) ----------

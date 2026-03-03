@@ -42,6 +42,9 @@ from .firebase_tools import (
     get_user_session_tool,
     update_user_session_tool,
     sync_user_to_session_state_tool,
+    upsert_web_chat,
+    append_web_chat_message,
+    get_web_chat_messages,
 )
 from .translate_tool import translate_tool
 from .browser_tool import browser_tool
@@ -113,6 +116,9 @@ __all__ = [
     "get_user_session_tool",
     "update_user_session_tool",
     "sync_user_to_session_state_tool",
+    "upsert_web_chat",
+    "append_web_chat_message",
+    "get_web_chat_messages",
     "translate_tool",
     "browser_tool",
     "create_verification_link_tool",

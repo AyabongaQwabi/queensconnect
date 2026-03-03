@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from './components/ChatMessage';
 import { ChatInput } from './components/ChatInput';
 import { TypingIndicator } from './components/TypingIndicator';
+import { InteractiveBlock } from './components/InteractiveBlock';
 
 const STORAGE_KEY = 'queens_connect_chat';
 const WA_NUMBER_KEY = 'queens_connect_wa_number';
@@ -11,6 +12,44 @@ const WELCOME =
   "Hi! 👋 I'm Queens Connect. Ask me about local listings, taxi fares, events, lost & found, news, or anything in your area. What would you like to do? 😊";
 const ERROR_MSG =
   'Something went wrong on our side — please try again in a moment.';
+
+const QUICK_ACTIONS = [
+  'Get a loan',
+  'View Taxi prices',
+  'Share Taxi price',
+  'Loan a person',
+  'Find some info',
+  'Share some info',
+  'Open a stokvel',
+  'Join a stokvel',
+  'Create a Listing',
+  'Find a Listing',
+  'Find lost item',
+  'List lost item',
+  'See events',
+  'List event',
+  'File complaint',
+  'List complaints',
+];
+
+const QUICK_ACTION_PHRASES: Record<string, string> = {
+  'Get a loan': 'I’d like to get a loan.',
+  'View Taxi prices': 'I’d like to see local taxi prices.',
+  'Share Taxi price': 'I’d like to share local taxi prices.',
+  'Loan a person': 'I’d like to loan money to someone.',
+  'Find some info': 'I’d like to find some community info.',
+  'Share some info': 'I’d like to share some community info.',
+  'Open a stokvel': 'I’d like to open a stokvel.',
+  'Join a stokvel': 'I’d like to join a stokvel.',
+  'Create a Listing': 'I’d like to create a community listing.',
+  'Find a Listing': 'I’d like to find a community listing.',
+  'Find lost item': 'I’d like to find a lost item.',
+  'List lost item': 'I’d like to list a lost item.',
+  'See events': 'I’d like to see community events.',
+  'List event': 'I’d like to list a community event.',
+  'File complaint': 'I’d like to file a community complaint.',
+  'List complaints': 'I’d like to see complaints I’ve filed.',
+};
 
 const LANGUAGE_OPTIONS = [
   { value: 'english', label: 'English' },
@@ -31,10 +70,21 @@ function getStoredLanguagePref(): LanguagePref {
   return 'english';
 }
 
+export type InteractiveOption = { value: string; label: string };
+
+export type InteractiveSpec = {
+  type: 'buttons' | 'dropdown' | 'radio' | 'checkboxes';
+  name: string;
+  label?: string | null;
+  options: InteractiveOption[];
+  submitLabel?: string | null;
+};
+
 type Message = {
   role: 'user' | 'assistant';
   content: string;
   responseTimeMs?: number;
+  interactive?: InteractiveSpec | null;
 };
 
 type SavedSession = {
@@ -122,22 +172,23 @@ function getWaNumber(): string {
   try {
     const stored = localStorage.getItem(WA_NUMBER_KEY);
     if (stored) return stored;
-    const id = 'web_' + Math.random().toString(36).slice(2, 10);
-    localStorage.setItem(WA_NUMBER_KEY, id);
-    return id;
+    return '';
   } catch {
-    return 'web_guest';
+    return '';
   }
 }
 
+/** True if we have a user-provided WhatsApp number (not placeholder). Required before chat. */
+function hasValidWaNumber(wa: string): boolean {
+  if (!wa || wa.startsWith('web_')) return false;
+  const digits = wa.replace(/\D/g, '');
+  return digits.length >= 10;
+}
+
 function createNewSessionId(): string {
-  const id = 'web_' + Math.random().toString(36).slice(2, 10);
-  try {
-    localStorage.setItem(WA_NUMBER_KEY, id);
-  } catch {
-    // ignore
-  }
-  return id;
+  const current = getWaNumber();
+  if (hasValidWaNumber(current)) return current;
+  return '';
 }
 
 function loadMessages(): Message[] {
@@ -484,12 +535,51 @@ export default function App() {
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
   const languageRef = useRef<HTMLDivElement>(null);
   const [waNumber, setWaNumberState] = useState(getWaNumber);
-  const [waNumberInput, setWaNumberInput] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [preChatWaInput, setPreChatWaInput] = useState('');
+  const [preChatError, setPreChatError] = useState<string | null>(null);
+  const hasWa = hasValidWaNumber(waNumber);
 
   useEffect(() => {
     saveMessages(messages);
   }, [messages]);
+
+  // Load persisted chat history from backend when we have a valid wa_number
+  useEffect(() => {
+    if (!hasWa || !waNumber) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${API_URL}/chats/${encodeURIComponent(waNumber)}/messages`,
+        );
+        const data = await res.json().catch(() => ({}));
+        const list = data.messages as
+          | Array<{
+              sender: string;
+              text: string;
+              timestamp?: string;
+              metadata?: { interactive?: InteractiveSpec };
+            }>
+          | undefined;
+        if (cancelled || !Array.isArray(list)) return;
+        const next: Message[] =
+          list.length === 0
+            ? [{ role: 'assistant', content: WELCOME }]
+            : list.map((m) => ({
+                role: m.sender === 'user' ? 'user' : 'assistant',
+                content: m.text ?? '',
+                interactive: m.metadata?.interactive ?? undefined,
+              }));
+        setMessages(next);
+      } catch {
+        // keep existing messages (e.g. from localStorage)
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [waNumber, hasWa]);
 
   useEffect(() => {
     listRef.current?.scrollTo(0, listRef.current.scrollHeight);
@@ -528,23 +618,60 @@ export default function App() {
   }, [languageDropdownOpen]);
 
   const handleNewSession = () => {
-    createNewSessionId();
-    setWaNumberState(getWaNumber());
+    // Start a fresh chat and force the user to enter a new WhatsApp number
+    try {
+      localStorage.removeItem(WA_NUMBER_KEY);
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify([{ role: 'assistant', content: WELCOME }]),
+      );
+    } catch {
+      // ignore storage errors
+    }
+    setWaNumberState('');
+    setPreChatWaInput('');
+    setPreChatError(null);
     setMessages([{ role: 'assistant', content: WELCOME }]);
     setActiveSessionId(null);
     setSidebarOpen(false);
   };
 
-  const handleSetWaNumber = () => {
-    const value = waNumberInput.trim();
-    if (!value) return;
-    try {
-      localStorage.setItem(WA_NUMBER_KEY, value);
-      setWaNumberState(value);
-      setWaNumberInput('');
-    } catch {
-      // ignore
+  const handlePreChatSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const v = preChatWaInput.trim();
+    if (!v) {
+      setPreChatError('Please enter your WhatsApp number.');
+      return;
     }
+    const digits = v.replace(/\D/g, '');
+    let national: string;
+    if (digits.startsWith('27')) {
+      national = digits.slice(2);
+    } else if (digits.startsWith('0')) {
+      national = digits.slice(1);
+    } else {
+      national = digits;
+    }
+    if (!/^[1-9][0-9]{8}$/.test(national)) {
+      setPreChatError(
+        'Please enter a valid WhatsApp number in the format +27XXXXXXXXX (e.g. +27603116777). It must not start with 0.',
+      );
+      return;
+    }
+    const normalized = `+27${national}`;
+    setPreChatError(null);
+    try {
+      localStorage.setItem(WA_NUMBER_KEY, normalized);
+      setWaNumberState(normalized);
+      setPreChatWaInput('');
+    } catch {
+      setPreChatError('Could not save. Please try again.');
+    }
+  };
+
+  const handleQuickAction = (action: string) => {
+    const message = QUICK_ACTION_PHRASES[action] ?? action;
+    handleSend(message);
   };
 
   const handleSaveSession = () => {
@@ -663,6 +790,10 @@ export default function App() {
                   const responseTimeMs =
                     data.responseTimeMs ??
                     Math.round(performance.now() - start);
+                  const interactive =
+                    data.interactive != null
+                      ? (data.interactive as InteractiveSpec)
+                      : undefined;
                   setMessages((prev) => {
                     const next = [...prev];
                     const last = next[next.length - 1];
@@ -671,6 +802,7 @@ export default function App() {
                         ...last,
                         content: reply,
                         responseTimeMs,
+                        interactive,
                       };
                     return next;
                   });
@@ -695,9 +827,13 @@ export default function App() {
         const reply =
           resNonStream.ok && data.reply != null ? data.reply : ERROR_MSG;
         const responseTimeMs = Math.round(performance.now() - start);
+        const interactive =
+          resNonStream.ok && data.interactive != null
+            ? (data.interactive as InteractiveSpec)
+            : undefined;
         setMessages((prev) => [
           ...prev,
-          { role: 'assistant', content: reply, responseTimeMs },
+          { role: 'assistant', content: reply, responseTimeMs, interactive },
         ]);
       }
     } catch {
@@ -712,271 +848,370 @@ export default function App() {
   };
 
   return (
-    <div className='flex h-screen max-h-[100dvh] sm:max-h-none bg-[#e8ecf4] overflow-hidden'>
-      {/* Mobile sidebar backdrop */}
+    <div className='h-screen max-h-[100dvh] bg-[#e8ecf4] flex items-center justify-center px-3 sm:px-6 py-4'>
+      {/* Mobile/desktop sidebar backdrop */}
       {sidebarOpen && (
         <button
           type='button'
           aria-label='Close menu'
-          className='fixed inset-0 bg-black/40 z-30 md:hidden'
+          className='fixed inset-0 bg-black/40 z-30'
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Left sidebar: drawer on mobile, static on md+ */}
-      <aside
-        ref={sidebarRef}
-        className={`
-          fixed md:relative inset-y-0 left-0 z-40 w-64 shrink-0 flex flex-col bg-white border-r border-gray-200
-          md:rounded-r-2xl md:shadow-sm overflow-hidden
+      <div className='relative w-full max-w-5xl flex items-stretch'>
+        {/* Left sidebar: always a slide-in drawer, hidden by default */}
+        <aside
+          ref={sidebarRef}
+          className={`
+          fixed inset-y-0 left-0 z-40 w-64 shrink-0 flex flex-col bg-white border-r border-gray-200
+          rounded-r-2xl shadow-sm overflow-hidden
           transform transition-transform duration-200 ease-out
-          md:transform-none
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
-      >
-        <div className='p-4 border-b border-gray-100 flex items-center justify-between md:block'>
-          <h1 className='text-lg font-bold text-gray-900 tracking-tight'>
-            Queens Connect
-          </h1>
-          <button
-            type='button'
-            aria-label='Close menu'
-            className='md:hidden p-2 -mr-2 rounded-lg text-gray-500 hover:bg-gray-100'
-            onClick={() => setSidebarOpen(false)}
-          >
-            <svg
-              className='w-5 h-5'
-              fill='none'
-              stroke='currentColor'
-              viewBox='0 0 24 24'
-              aria-hidden
-            >
-              <path
-                strokeLinecap='round'
-                strokeLinejoin='round'
-                strokeWidth={2}
-                d='M6 18L18 6M6 6l12 12'
-              />
-            </svg>
-          </button>
-        </div>
-        <div className='p-4 pt-0 border-b border-gray-100 md:border-b'>
-          <button
-            type='button'
-            onClick={handleNewSession}
-            className='mt-3 w-full flex items-center justify-center gap-2 rounded-xl bg-[#7c3aed] hover:bg-[#6d28d9] text-white font-medium py-2.5 text-sm transition-colors'
-          >
-            <span className='text-lg leading-none'>+</span>
-            New chat
-          </button>
-          <button
-            type='button'
-            onClick={() => {
-              setViewMode(viewMode === 'admin' ? 'chat' : 'admin');
-              setSidebarOpen(false);
-            }}
-            className={`mt-2 w-full flex items-center justify-center gap-2 rounded-xl font-medium py-2.5 text-sm transition-colors ${
-              viewMode === 'admin'
-                ? 'bg-gray-200 text-gray-800'
-                : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200'
-            }`}
-          >
-            {viewMode === 'admin' ? '← Back to chat' : 'Add lender / borrower'}
-          </button>
-        </div>
-
-        <div className='flex-1 overflow-y-auto flex flex-col min-h-0'>
-          <div className='px-3 py-2 flex items-center justify-between'>
-            <span className='text-xs font-medium text-gray-500 uppercase tracking-wide'>
-              Your conversations
-            </span>
-            {savedSessions.length > 0 && (
-              <button
-                type='button'
-                onClick={handleClearAllSessions}
-                className='text-xs text-[#7c3aed] hover:underline'
-              >
-                Clear All
-              </button>
-            )}
-          </div>
-          <ul className='px-2 pb-4 space-y-0.5'>
-            {savedSessions.length === 0 ? (
-              <li className='px-3 py-4 text-sm text-gray-400 text-center'>
-                No sessions yet. Start a chat and save it.
-              </li>
-            ) : (
-              savedSessions.map((s) => (
-                <li key={s.id}>
-                  <button
-                    type='button'
-                    onClick={() => handleOpenSession(s.id)}
-                    className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-colors group ${
-                      activeSessionId === s.id
-                        ? 'bg-[#ede9fe] text-[#5b21b6]'
-                        : 'hover:bg-gray-100 text-gray-700'
-                    }`}
-                  >
-                    <span className='shrink-0 w-6 h-6 rounded bg-gray-200 flex items-center justify-center text-gray-500 text-xs'>
-                      💬
-                    </span>
-                    <span className='min-w-0 flex-1 text-sm truncate font-medium'>
-                      {s.name}
-                    </span>
-                    <button
-                      type='button'
-                      onClick={(e) => handleDeleteSession(e, s.id)}
-                      className='shrink-0 p-1 rounded text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity'
-                      title='Delete'
-                      aria-label='Delete session'
-                    >
-                      ×
-                    </button>
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-
-        <div className='p-3 border-t border-gray-100 space-y-2'>
-          {saveFeedback && (
-            <p className='text-xs text-emerald-600 px-1'>{saveFeedback}</p>
-          )}
-          <button
-            type='button'
-            onClick={() => {
-              handleSaveSession();
-              setSidebarOpen(false);
-            }}
-            className='w-full rounded-xl py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 border border-gray-200 transition-colors'
-          >
-            Save session
-          </button>
-          <div className='relative' ref={languageRef}>
+        >
+          <div className='p-4 border-b border-gray-100 flex items-center justify-between md:block'>
+            <h1 className='text-lg font-bold text-gray-900 tracking-tight'>
+              Queens Connect
+            </h1>
             <button
               type='button'
-              onClick={() => setLanguageDropdownOpen((o) => !o)}
-              className='w-full rounded-xl py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 border border-gray-200 flex items-center justify-between px-3'
+              aria-label='Close menu'
+              className='md:hidden p-2 -mr-2 rounded-lg text-gray-500 hover:bg-gray-100'
+              onClick={() => setSidebarOpen(false)}
             >
-              <span>
-                🌐{' '}
-                {LANGUAGE_OPTIONS.find((o) => o.value === languagePref)
-                  ?.label ?? languagePref}
-              </span>
-              <span className='text-gray-400'>
-                {languageDropdownOpen ? '▲' : '▼'}
-              </span>
+              <svg
+                className='w-5 h-5'
+                fill='none'
+                stroke='currentColor'
+                viewBox='0 0 24 24'
+                aria-hidden
+              >
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  strokeWidth={2}
+                  d='M6 18L18 6M6 6l12 12'
+                />
+              </svg>
             </button>
-            {languageDropdownOpen && (
-              <ul className='absolute bottom-full left-0 right-0 mb-1 rounded-xl border border-gray-200 bg-white shadow-lg py-1 z-10'>
-                {LANGUAGE_OPTIONS.map((opt) => (
-                  <li
-                    key={opt.value}
-                    role='option'
-                    onClick={() => {
-                      setLanguagePref(opt.value);
-                      setLanguageDropdownOpen(false);
-                    }}
-                    className={`px-3 py-2 text-sm cursor-pointer ${
-                      languagePref === opt.value
-                        ? 'bg-[#ede9fe] text-[#5b21b6] font-medium'
-                        : 'hover:bg-gray-50'
-                    }`}
-                  >
-                    {opt.label}
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
-        </div>
-      </aside>
+          <div className='p-4 pt-0 border-b border-gray-100 md:border-b'>
+            <button
+              type='button'
+              onClick={handleNewSession}
+              className='mt-3 w-full flex items-center justify-center gap-2 rounded-xl bg-[#7c3aed] hover:bg-[#6d28d9] text-white font-medium py-2.5 text-sm transition-colors'
+            >
+              <span className='text-lg leading-none'>+</span>
+              New chat
+            </button>
+            <button
+              type='button'
+              onClick={() => {
+                setViewMode(viewMode === 'admin' ? 'chat' : 'admin');
+                setSidebarOpen(false);
+              }}
+              className={`mt-2 w-full flex items-center justify-center gap-2 rounded-xl font-medium py-2.5 text-sm transition-colors ${
+                viewMode === 'admin'
+                  ? 'bg-gray-200 text-gray-800'
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200'
+              }`}
+            >
+              {viewMode === 'admin'
+                ? '← Back to chat'
+                : 'Add lender / borrower'}
+            </button>
+          </div>
 
-      {/* Main area: chat or admin */}
-      <main className='flex-1 flex flex-col min-w-0 min-h-0 p-3 sm:p-4'>
-        {viewMode === 'admin' ? (
-          <AdminPanel apiUrl={API_URL} />
-        ) : (
-          <div className='flex-1 flex flex-col bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-0'>
-            <div className='px-3 sm:px-5 py-3 border-b border-gray-100 space-y-2 shrink-0'>
-              <div className='flex items-center gap-2'>
+          <div className='flex-1 overflow-y-auto flex flex-col min-h-0'>
+            <div className='px-3 py-2 flex items-center justify-between'>
+              <span className='text-xs font-medium text-gray-500 uppercase tracking-wide'>
+                Your conversations
+              </span>
+              {savedSessions.length > 0 && (
                 <button
                   type='button'
-                  aria-label='Open menu'
-                  className='md:hidden p-2 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100'
-                  onClick={() => setSidebarOpen(true)}
+                  onClick={handleClearAllSessions}
+                  className='text-xs text-[#7c3aed] hover:underline'
                 >
-                  <svg
-                    className='w-5 h-5'
-                    fill='none'
-                    stroke='currentColor'
-                    viewBox='0 0 24 24'
-                    aria-hidden
-                  >
-                    <path
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      strokeWidth={2}
-                      d='M4 6h16M4 12h16M4 18h16'
-                    />
-                  </svg>
+                  Clear All
                 </button>
-                <h2 className='flex-1 min-w-0 text-sm font-medium text-gray-500 truncate'>
-                  {getConversationTitle(messages)}
-                </h2>
-              </div>
-              <div className='flex flex-wrap items-center gap-2'>
-                <span className='text-xs text-gray-500 shrink-0'>
-                  Chat number:
-                </span>
-                <input
-                  type='text'
-                  value={waNumberInput !== '' ? waNumberInput : waNumber}
-                  onChange={(e) => setWaNumberInput(e.target.value)}
-                  onBlur={() => waNumberInput.trim() && handleSetWaNumber()}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSetWaNumber()}
-                  placeholder='e.g. 27821234567'
-                  className='flex-1 min-w-0 sm:min-w-[120px] max-w-full sm:max-w-[200px] rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:border-[#7c3aed] focus:outline-none focus:ring-1 focus:ring-[#7c3aed]'
-                />
-                {waNumberInput.trim() !== '' &&
-                  waNumberInput.trim() !== waNumber && (
+              )}
+            </div>
+            <ul className='px-2 pb-4 space-y-0.5'>
+              {savedSessions.length === 0 ? (
+                <li className='px-3 py-4 text-sm text-gray-400 text-center'>
+                  No sessions yet. Start a chat and save it.
+                </li>
+              ) : (
+                savedSessions.map((s) => (
+                  <li key={s.id}>
                     <button
                       type='button'
-                      onClick={handleSetWaNumber}
-                      className='rounded-lg bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-xs font-medium px-2.5 py-1.5 shrink-0'
+                      onClick={() => handleOpenSession(s.id)}
+                      className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-colors group ${
+                        activeSessionId === s.id
+                          ? 'bg-[#ede9fe] text-[#5b21b6]'
+                          : 'hover:bg-gray-100 text-gray-700'
+                      }`}
                     >
-                      Set
+                      <span className='shrink-0 w-6 h-6 rounded bg-gray-200 flex items-center justify-center text-gray-500 text-xs'>
+                        💬
+                      </span>
+                      <span className='min-w-0 flex-1 text-sm truncate font-medium'>
+                        {s.name}
+                      </span>
+                      <button
+                        type='button'
+                        onClick={(e) => handleDeleteSession(e, s.id)}
+                        className='shrink-0 p-1 rounded text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity'
+                        title='Delete'
+                        aria-label='Delete session'
+                      >
+                        ×
+                      </button>
                     </button>
-                  )}
-              </div>
-            </div>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
 
-            <div
-              ref={listRef}
-              className='flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 space-y-4 sm:space-y-6 min-h-0'
+          <div className='p-3 border-t border-gray-100 space-y-2'>
+            {saveFeedback && (
+              <p className='text-xs text-emerald-600 px-1'>{saveFeedback}</p>
+            )}
+            <button
+              type='button'
+              onClick={() => {
+                handleSaveSession();
+                setSidebarOpen(false);
+              }}
+              className='w-full rounded-xl py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 border border-gray-200 transition-colors'
             >
-              {messages.map((msg, i) => (
-                <ChatMessage
-                  key={i}
-                  role={msg.role}
-                  content={msg.content}
-                  responseTimeMs={msg.responseTimeMs}
-                />
-              ))}
-              {isLoading && <TypingIndicator />}
-            </div>
-
-            <div className='border-t border-gray-100 p-3 sm:p-4 shrink-0'>
-              <ChatInput
-                onSend={handleSend}
-                disabled={isLoading}
-                placeholder="What's on your mind?"
-              />
+              Save session
+            </button>
+            <div className='relative' ref={languageRef}>
+              <button
+                type='button'
+                onClick={() => setLanguageDropdownOpen((o) => !o)}
+                className='w-full rounded-xl py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 border border-gray-200 flex items-center justify-between px-3'
+              >
+                <span>
+                  🌐{' '}
+                  {LANGUAGE_OPTIONS.find((o) => o.value === languagePref)
+                    ?.label ?? languagePref}
+                </span>
+                <span className='text-gray-400'>
+                  {languageDropdownOpen ? '▲' : '▼'}
+                </span>
+              </button>
+              {languageDropdownOpen && (
+                <ul className='absolute bottom-full left-0 right-0 mb-1 rounded-xl border border-gray-200 bg-white shadow-lg py-1 z-10'>
+                  {LANGUAGE_OPTIONS.map((opt) => (
+                    <li
+                      key={opt.value}
+                      role='option'
+                      onClick={() => {
+                        setLanguagePref(opt.value);
+                        setLanguageDropdownOpen(false);
+                      }}
+                      className={`px-3 py-2 text-sm cursor-pointer ${
+                        languagePref === opt.value
+                          ? 'bg-[#ede9fe] text-[#5b21b6] font-medium'
+                          : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      {opt.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
-        )}
-      </main>
+        </aside>
+
+        {/* Main area: chat or admin */}
+        <main className='flex-1 flex flex-col min-w-0 min-h-0 p-1 sm:p-2 md:p-3'>
+          {viewMode === 'admin' ? (
+            <AdminPanel apiUrl={API_URL} />
+          ) : !hasWa ? (
+            <div className='flex-1 flex flex-col bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-0 items-center justify-center p-6'>
+              <div className='w-full max-w-sm space-y-4'>
+                <h2 className='text-lg font-semibold text-gray-900 text-center'>
+                  Enter your WhatsApp number
+                </h2>
+                <p className='text-sm text-gray-500 text-center'>
+                  This links your chat to your WhatsApp so we can keep your
+                  conversation in sync. Use the same number you use on WhatsApp
+                  (e.g. +27…).
+                </p>
+                <form onSubmit={handlePreChatSubmit} className='space-y-3'>
+                  <input
+                    type='tel'
+                    value={preChatWaInput}
+                    onChange={(e) => {
+                      setPreChatWaInput(e.target.value);
+                      setPreChatError(null);
+                    }}
+                    placeholder='e.g. +27603116777'
+                    className='w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-[#7c3aed] focus:outline-none focus:ring-2 focus:ring-[#ede9fe]'
+                    aria-label='WhatsApp number'
+                  />
+                  {preChatError && (
+                    <p className='text-sm text-red-600' role='alert'>
+                      {preChatError}
+                    </p>
+                  )}
+                  <button
+                    type='submit'
+                    disabled={!preChatWaInput.trim()}
+                    className='w-full rounded-xl bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 text-sm transition-colors'
+                  >
+                    Continue to chat
+                  </button>
+                </form>
+              </div>
+            </div>
+          ) : (
+            <div className='flex-1 flex flex-col bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-0'>
+              <div className='px-3 sm:px-5 py-3 border-b border-gray-100 space-y-2 shrink-0'>
+                <div className='flex items-center gap-2'>
+                  <button
+                    type='button'
+                    aria-label='Open menu'
+                    className='md:hidden p-2 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100'
+                    onClick={() => setSidebarOpen(true)}
+                  >
+                    <svg
+                      className='w-5 h-5'
+                      fill='none'
+                      stroke='currentColor'
+                      viewBox='0 0 24 24'
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap='round'
+                        strokeLinejoin='round'
+                        strokeWidth={2}
+                        d='M4 6h16M4 12h16M4 18h16'
+                      />
+                    </svg>
+                  </button>
+                  <h2 className='flex-1 min-w-0 text-sm font-medium text-gray-500 truncate'>
+                    {getConversationTitle(messages)}
+                  </h2>
+                  <div className='flex items-center gap-1 sm:gap-2 shrink-0'>
+                    <button
+                      type='button'
+                      onClick={handleNewSession}
+                      className='flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 hover:border-violet-300 transition-colors'
+                      title='New chat'
+                    >
+                      <svg
+                        className='w-3.5 h-3.5'
+                        fill='none'
+                        stroke='currentColor'
+                        viewBox='0 0 24 24'
+                        aria-hidden
+                      >
+                        <path
+                          strokeLinecap='round'
+                          strokeLinejoin='round'
+                          strokeWidth={2}
+                          d='M12 4v16m8-8H4'
+                        />
+                      </svg>
+                      New
+                    </button>
+                    <button
+                      type='button'
+                      onClick={handleSaveSession}
+                      className='flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors'
+                      title='Save this chat'
+                    >
+                      <svg
+                        className='w-3.5 h-3.5'
+                        fill='none'
+                        stroke='currentColor'
+                        viewBox='0 0 24 24'
+                        aria-hidden
+                      >
+                        <path
+                          strokeLinecap='round'
+                          strokeLinejoin='round'
+                          strokeWidth={2}
+                          d='M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4'
+                        />
+                      </svg>
+                      Save
+                    </button>
+                    <button
+                      type='button'
+                      onClick={() => setSidebarOpen(true)}
+                      className='flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors'
+                      title='Load saved chat'
+                    >
+                      <svg
+                        className='w-3.5 h-3.5'
+                        fill='none'
+                        stroke='currentColor'
+                        viewBox='0 0 24 24'
+                        aria-hidden
+                      >
+                        <path
+                          strokeLinecap='round'
+                          strokeLinejoin='round'
+                          strokeWidth={2}
+                          d='M5 19a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v2a2 2 0 01-2 2h-2m-4 0h2a2 2 0 002-2V9a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zm0 0h2a2 2 0 002-2v-2a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2z'
+                        />
+                      </svg>
+                      Load
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                ref={listRef}
+                className='flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 space-y-4 sm:space-y-6 min-h-0 max-h-[calc(100dvh-11rem)]'
+              >
+                {messages.map((msg, i) => (
+                  <div key={i} className='space-y-1'>
+                    <ChatMessage
+                      role={msg.role}
+                      content={msg.content}
+                      responseTimeMs={msg.responseTimeMs}
+                      quickActions={QUICK_ACTIONS}
+                      onQuickAction={handleQuickAction}
+                    />
+                    {msg.role === 'assistant' &&
+                      msg.interactive &&
+                      msg.interactive.options?.length > 0 && (
+                        <div className='pl-0'>
+                          <InteractiveBlock
+                            spec={msg.interactive}
+                            onSelect={handleSend}
+                            disabled={isLoading}
+                          />
+                        </div>
+                      )}
+                  </div>
+                ))}
+                {isLoading && <TypingIndicator />}
+              </div>
+
+              <div className='border-t border-gray-100 p-3 sm:p-4 shrink-0'>
+                <ChatInput
+                  onSend={handleSend}
+                  disabled={isLoading}
+                  placeholder="What's on your mind?"
+                />
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
