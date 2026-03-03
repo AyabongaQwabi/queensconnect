@@ -257,6 +257,25 @@ def _posted_ago(created_at: Any) -> str:
         return ""
 
 
+def _created_at_sort_key(created_at: Any) -> float:
+    """Return a numeric sort key for createdAt (Firestore Timestamp or datetime). Older = smaller."""
+    if created_at is None:
+        return 0.0
+    try:
+        if hasattr(created_at, "seconds"):
+            return float(created_at.seconds) + (float(getattr(created_at, "nanoseconds", 0)) / 1e9)
+        if hasattr(created_at, "timestamp"):
+            return created_at.timestamp()
+        if hasattr(created_at, "isoformat"):
+            dt = created_at
+            if getattr(dt, "tzinfo", None) is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.timestamp()
+    except Exception:
+        pass
+    return 0.0
+
+
 def _format_verification_hint(result: dict, collection: str) -> dict:
     """
     Add verification display hints to a single result from infoBits or transportFares.
@@ -306,9 +325,21 @@ def _fetch_docs(
             if len(results) >= min(int(limit), 20):
                 break
             d = doc.to_dict()
-            # Simple text match on string fields and tags
+            # Simple text match on string fields and tags (include fromPlace, toPlace, transportType for transportFares)
             text_parts = " ".join(
-                str(d.get(k, "")) for k in ("title", "text", "description", "name", "content", "summaryEn", "summaryXh")
+                str(d.get(k, ""))
+                for k in (
+                    "title",
+                    "text",
+                    "description",
+                    "name",
+                    "content",
+                    "summaryEn",
+                    "summaryXh",
+                    "fromPlace",
+                    "toPlace",
+                    "transportType",
+                )
             ).lower()
             tags_str = " ".join(d.get("tags") or []).lower()
             loc = (d.get("location") or d.get("foundAt") or "").lower()
@@ -726,12 +757,26 @@ def fetch_places_tool(
     limit: int = 10,
 ) -> dict:
     """
-    Fetch places (shops, clinics, spazas) from Firestore. Use when the user asks for a place or business.
-    query, filters (e.g. location), limit. Returns status, results, count.
+    Fetch place-related information from both places and infoBits.
+    Use when the user asks for a place, business, or where to find something (e.g. charcoal, spaza, clinic).
+    Searches the places collection (structured places) and the infoBits collection (where users often post
+    tips like "charcoal at X in Ezibeleni"). Each result includes sourceCollection ("places" or "infoBits");
+    infoBits also include verificationPrefix, upvoteInstruction, postedAgo when relevant.
+    query, filters (e.g. foundAt/location), limit. Returns status, results (merged, sorted by createdAt desc), count.
     """
     logger.info("fetch_places_tool called query=%r limit=%s", (query or "")[:80], limit)
-    results = _fetch_docs("places", query, filters, limit)
-    return {"status": "success", "results": results, "count": len(results)}
+    cap = min(int(limit), 20)
+    places_results = _fetch_docs("places", query, filters, cap)
+    infobits_results = _fetch_docs("infoBits", query, filters, cap)
+    infobits_results = [_format_verification_hint(r, "infoBits") for r in infobits_results]
+    for r in places_results:
+        r["sourceCollection"] = "places"
+    for r in infobits_results:
+        r["sourceCollection"] = "infoBits"
+    merged = places_results + infobits_results
+    merged.sort(key=lambda r: _created_at_sort_key(r.get("createdAt")), reverse=True)
+    merged = merged[:cap]
+    return {"status": "success", "results": merged, "count": len(merged)}
 
 
 def fetch_suburbs_tool(
@@ -768,15 +813,28 @@ def fetch_transport_fares_tool(
     limit: int = 10,
 ) -> dict:
     """
-    Fetch transport fares (taxi, bus, lift, cab) from Firestore.
-    Use when the user asks for fare from A to B or transport prices.
-    Each result includes verificationPrefix, upvoteInstruction (if pending), and postedAgo for display.
-    query (e.g. place names), filters (e.g. transportType), limit. Returns status, results, count.
+    Fetch transport fare information from both transportFares and infoBits.
+    Use when the user asks for fare from A to B or transport prices. Searches the transportFares
+    collection (structured fares) and the infoBits collection (where users sometimes post fare tips).
+    Each result includes verificationPrefix, upvoteInstruction (if pending), postedAgo, and
+    sourceCollection ("transportFares" or "infoBits") so you can label e.g. "from fare database" vs
+    "from community tips". query (e.g. place names), filters (e.g. transportType), limit.
+    Returns status, results (merged and sorted by createdAt desc), count.
     """
     logger.info("fetch_transport_fares_tool called query=%r limit=%s", (query or "")[:80], limit)
-    results = _fetch_docs("transportFares", query, filters, limit)
-    results = [_format_verification_hint(r, "transportFares") for r in results]
-    return {"status": "success", "results": results, "count": len(results)}
+    cap = min(int(limit), 20)
+    transport_results = _fetch_docs("transportFares", query, filters, cap)
+    infobits_results = _fetch_docs("infoBits", query, filters, cap)
+    transport_results = [_format_verification_hint(r, "transportFares") for r in transport_results]
+    infobits_results = [_format_verification_hint(r, "infoBits") for r in infobits_results]
+    for r in transport_results:
+        r["sourceCollection"] = "transportFares"
+    for r in infobits_results:
+        r["sourceCollection"] = "infoBits"
+    merged = transport_results + infobits_results
+    merged.sort(key=lambda r: _created_at_sort_key(r.get("createdAt")), reverse=True)
+    merged = merged[:cap]
+    return {"status": "success", "results": merged, "count": len(merged)}
 
 
 # ---------- Users & userSessions (onboarding); no SCHEMAS, free-form per spec ----------

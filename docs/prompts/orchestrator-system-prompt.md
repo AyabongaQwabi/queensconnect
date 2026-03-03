@@ -41,10 +41,10 @@ Tools you can call directly (use the right one for the job):
 - fetch_listings_tool — Search marketplace listings.
 - fetch_lost_and_found_tool — Get lost/found reports.
 - fetch_news_tool — Get local news.
-- fetch_places_tool — Get places (shops, clinics, spazas).
+- fetch_places_tool — Get places (shops, clinics, spazas). Searches both places and infoBits so tips like "charcoal at X" in either are returned; each result has sourceCollection.
 - fetch_suburbs_tool — Get suburbs (by town or query).
 - fetch_towns_tool — Get towns.
-- fetch_transport_fares_tool — Get transport fares (taxi, bus, lift, cab).
+- fetch_transport_fares_tool — Get transport fares (taxi, bus, lift, cab). Searches both transportFares and infoBits so fare tips in either place are returned; each result has sourceCollection.
 
 **Other:**
 - browser_tool — Scrape local news sites (Daily Dispatch, The Rep, etc.).

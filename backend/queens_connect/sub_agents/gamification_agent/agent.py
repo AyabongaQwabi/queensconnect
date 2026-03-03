@@ -16,7 +16,10 @@ def _load_instruction() -> str:
     path = config.REPO_ROOT / "docs" / "prompts" / "gamification-agent.md"
     if path.exists():
         text = path.read_text(encoding="utf-8")
-        return text.replace("{waNumber}", "{waNumber?}").replace("{currentDate}", "{currentDate?}")
+        text = text.replace("{waNumber}", "{waNumber?}").replace("{currentDate}", "{currentDate?}")
+        # Escape literal placeholder so ADK does not treat it as a context variable
+        text = text.replace("{code}", "[voucher code from redeem_voucher_tool result]")
+        return text
     return _default_instruction()
 
 
