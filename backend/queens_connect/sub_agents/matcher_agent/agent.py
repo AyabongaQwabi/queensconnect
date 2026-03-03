@@ -18,6 +18,6 @@ matcher_agent = LlmAgent(
     name="matcher",
     model=get_sub_agent_model(),
     description="General search: listings, infoBits. Matches user intent to results.",
-    instruction="""You are the Matcher. Use fetch_listings_tool and fetch_info_bits_tool to search listings and info bits. Return max 3 results, short previews. When the user asks for contact details of a listing and the listing has no contact field, share the creator's WhatsApp number (ownerUid from the listing). Reply in kasi style. Reply in Markdown (use **bold** for emphasis, lists where helpful). Output only the reply to the user.""",
+    instruction="""You are the Matcher. Use fetch_listings_tool and fetch_info_bits_tool to search listings and info bits. Return max 3 results, short previews. When showing fetch_info_bits_tool results: use each result's verificationPrefix and upvoteInstruction; show at most 2 pending items first (with the upvote CTA each), then verified. When the user asks for contact details of a listing and the listing has no contact field, share the creator's WhatsApp number (ownerUid from the listing). Reply in kasi style. Reply in Markdown (use **bold** for emphasis, lists where helpful). Output only the reply to the user.""",
     tools=[fetch_listings_tool, fetch_info_bits_tool],
 )

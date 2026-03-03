@@ -223,6 +223,65 @@ def _save_doc(collection: str, doc: dict) -> str:
         raise
 
 
+def _posted_ago(created_at: Any) -> str:
+    """Turn createdAt (Firestore timestamp or datetime) into a short relative string e.g. '2h ago', '1 day ago'."""
+    if created_at is None:
+        return ""
+    now = datetime.now(timezone.utc)
+    try:
+        if hasattr(created_at, "seconds"):
+            # Firestore Timestamp
+            from datetime import timedelta
+            dt = datetime.fromtimestamp(created_at.seconds, tz=timezone.utc)
+        elif hasattr(created_at, "isoformat"):
+            dt = created_at
+            if getattr(dt, "tzinfo", None) is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            return ""
+        delta = now - dt
+        total_seconds = int(delta.total_seconds())
+        if total_seconds < 60:
+            return "just now"
+        if total_seconds < 3600:
+            return f"{total_seconds // 60}m ago"
+        if total_seconds < 86400:
+            return f"{total_seconds // 3600}h ago"
+        days = total_seconds // 86400
+        if days == 1:
+            return "1 day ago"
+        if days < 7:
+            return f"{days} days ago"
+        return f"{days // 7}w ago"
+    except Exception:
+        return ""
+
+
+def _format_verification_hint(result: dict, collection: str) -> dict:
+    """
+    Add verification display hints to a single result from infoBits or transportFares.
+    Adds: verificationPrefix, upvoteInstruction (only when pending + shortCode), postedAgo.
+    """
+    out = dict(result)
+    status = (result.get("status") or "").strip().lower()
+    short_code = (result.get("shortCode") or "").strip()
+    if status == "pending":
+        out["verificationPrefix"] = "UNVERIFIED (waiting for community love)"
+        if short_code:
+            out["upvoteInstruction"] = (
+                f"Reply exactly: upvote {short_code} if true "
+                "(3 upvotes = 25 Kasi Points for the poster and it becomes verified)."
+            )
+        else:
+            out["upvoteInstruction"] = ""
+    else:
+        out["verificationPrefix"] = "Verified by community"
+        out["upvoteInstruction"] = ""
+    created = result.get("createdAt")
+    out["postedAgo"] = _posted_ago(created) if created else ""
+    return out
+
+
 def _fetch_docs(
     collection: str,
     query: str = "",
@@ -594,10 +653,12 @@ def fetch_info_bits_tool(
     """
     Fetch info bits (tips, taxi prices, load-shedding notes) from Firestore.
     Use when the user asks for local tips or quick info. query, filters (e.g. location), limit.
+    Each result includes verificationPrefix, upvoteInstruction (if pending), and postedAgo for display.
     Returns status, results, count.
     """
     logger.info("fetch_info_bits_tool called query=%r limit=%s", (query or "")[:80], limit)
     results = _fetch_docs("infoBits", query, filters, limit)
+    results = [_format_verification_hint(r, "infoBits") for r in results]
     return {"status": "success", "results": results, "count": len(results)}
 
 
@@ -709,10 +770,12 @@ def fetch_transport_fares_tool(
     """
     Fetch transport fares (taxi, bus, lift, cab) from Firestore.
     Use when the user asks for fare from A to B or transport prices.
+    Each result includes verificationPrefix, upvoteInstruction (if pending), and postedAgo for display.
     query (e.g. place names), filters (e.g. transportType), limit. Returns status, results, count.
     """
     logger.info("fetch_transport_fares_tool called query=%r limit=%s", (query or "")[:80], limit)
     results = _fetch_docs("transportFares", query, filters, limit)
+    results = [_format_verification_hint(r, "transportFares") for r in results]
     return {"status": "success", "results": results, "count": len(results)}
 
 

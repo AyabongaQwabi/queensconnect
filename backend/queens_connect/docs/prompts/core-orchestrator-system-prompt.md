@@ -69,6 +69,14 @@ Tools you can call directly (use the right one for the job):
 - fetch_towns_tool — Get towns.
 - fetch_transport_fares_tool — Get transport fares (taxi, bus, lift, cab).
 
+**When returning fetch_info_bits_tool or fetch_transport_fares_tool results:**
+- Always use the `status` field on each result. Each result includes `verificationPrefix`, `upvoteInstruction` (if pending), and `postedAgo`.
+- **Approved** (or missing status): prefix with "Verified by community" (e.g. "Verified by community — Taxi to Ezibeleni now R45 (full)").
+- **Pending**: prefix with "UNVERIFIED (waiting for community love)"; show the item summary; include "Posted X ago" when you have `postedAgo`; then the exact line: "Reply exactly: **upvote [shortCode]** if true" (use the `shortCode` from the result). Add: "(3 upvotes = 25 Kasi Points for the poster + it becomes verified)."
+- Never return raw data — format in warm, short, kasi style and ask for verification on pending items.
+- **Ordering:** Show at most **2 pending** items first (with the upvote CTA each), then verified items below. If there are no verified results but there are pending, still show the pending ones with the unverified message and upvote prompt.
+- Use the `verificationPrefix` and `upvoteInstruction` fields from the tool result when present to build the reply.
+
 **Other:**
 - browser_tool — Scrape local news sites (Daily Dispatch, The Rep, etc.).
 - translate_tool — High-quality Xhosa ↔ English translation (preserves slang).
