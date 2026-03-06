@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import type { Components } from "react-markdown"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -43,16 +44,27 @@ export function ChatMessage({ role, content, responseTimeMs, quickActions = [], 
   const [menuOpen, setMenuOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLUListElement>(null)
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 })
 
   useEffect(() => {
     if (!menuOpen) return
     function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false)
-      }
+      const target = e.target as Node
+      const inMenu = menuRef.current?.contains(target)
+      const inDropdown = dropdownRef.current?.contains(target)
+      if (!inMenu && !inDropdown) setMenuOpen(false)
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [menuOpen])
+
+  // Position dropdown in viewport when opening (for portal)
+  useEffect(() => {
+    if (menuOpen && menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect()
+      setDropdownPosition({ top: rect.bottom + 4, left: rect.left })
+    }
   }, [menuOpen])
 
   const handleCopy = async () => {
@@ -110,46 +122,51 @@ export function ChatMessage({ role, content, responseTimeMs, quickActions = [], 
               Menu
               <span className="text-gray-400">{menuOpen ? "▲" : "▼"}</span>
             </button>
-            {menuOpen && (
-              <ul
-                role="listbox"
-                className="absolute left-0 top-full mt-1 z-20 min-w-[200px] max-h-[260px] overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg ring-1 ring-black/5"
-              >
-                {quickActions.map((action) => (
-                  <li
-                    key={action}
-                    role="option"
-                    onClick={() => {
-                      onQuickAction(action)
-                      setMenuOpen(false)
-                    }}
-                    className="px-3 py-2 text-sm text-gray-800 hover:bg-violet-50 cursor-pointer"
-                  >
-                    {action}
-                  </li>
-                ))}
-                {hasAdminActions && (
-                  <>
-                    <li className="px-3 py-1.5 mt-1 border-t border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                      Admin
-                    </li>
-                    {adminQuickActions!.map((action) => (
-                      <li
-                        key={action}
-                        role="option"
-                        onClick={() => {
-                          onQuickAction(action)
-                          setMenuOpen(false)
-                        }}
-                        className="px-3 py-2 text-sm text-gray-800 hover:bg-violet-50 cursor-pointer"
-                      >
-                        {action}
+            {menuOpen &&
+              createPortal(
+                <ul
+                  ref={dropdownRef}
+                  role="listbox"
+                  className="fixed z-[100] min-w-[200px] max-h-[70vh] overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg ring-1 ring-black/5"
+                  style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
+                >
+                  {hasAdminActions && (
+                    <>
+                      <li className="px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        Admin
                       </li>
-                    ))}
-                  </>
-                )}
-              </ul>
-            )}
+                      {adminQuickActions!.map((action) => (
+                        <li
+                          key={action}
+                          role="option"
+                          onClick={() => {
+                            onQuickAction(action)
+                            setMenuOpen(false)
+                          }}
+                          className="px-3 py-2 text-sm text-gray-800 hover:bg-violet-50 cursor-pointer"
+                        >
+                          {action}
+                        </li>
+                      ))}
+                      <li className="my-1 border-t border-gray-100" aria-hidden />
+                    </>
+                  )}
+                  {quickActions.map((action) => (
+                    <li
+                      key={action}
+                      role="option"
+                      onClick={() => {
+                        onQuickAction(action)
+                        setMenuOpen(false)
+                      }}
+                      className="px-3 py-2 text-sm text-gray-800 hover:bg-violet-50 cursor-pointer"
+                    >
+                      {action}
+                    </li>
+                  ))}
+                </ul>,
+                document.body
+              )}
           </div>
         )}
         {responseTimeMs != null && (

@@ -48,9 +48,6 @@ const ADMIN_WA_NUMBER = '27603116777';
 
 function isAdminUser(waNumber: string): boolean {
   const digits = (waNumber || '').replace(/\D/g, '');
-  console.log('digits', digits);
-  console.log('ADMIN_WA_NUMBER', ADMIN_WA_NUMBER);
-  console.log('digits === ADMIN_WA_NUMBER', digits === ADMIN_WA_NUMBER);
   return digits === ADMIN_WA_NUMBER;
 }
 
