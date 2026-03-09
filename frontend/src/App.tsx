@@ -9,10 +9,6 @@ const WA_NUMBER_KEY = 'queens_connect_wa_number';
 const SAVED_SESSIONS_KEY = 'queens_connect_saved_sessions';
 const LANGUAGE_PREF_KEY = 'queens_connect_language_pref';
 const WELCOME =
-  '**Testing area** — This is not the real app.\n\n' +
-  '• **Verifications** are not real: you can just reply "done" without clicking any link.\n' +
-  '• **Payments**: you will need to click the link to our test environment when we send it.\n\n' +
-  '—\n\n' +
   "Hi! 👋 I'm Queens Connect. Ask me about local businesses, cabs, events, or anything in your area. What would you like to do? 😊";
 const ERROR_MSG =
   'Something went wrong on our side — please try again in a moment.';
@@ -30,7 +26,7 @@ const QUICK_ACTIONS = [
   'Add a lost item',
   'See events',
   'Add an event',
-  'View Taxi prices',
+  'Create a stokvel',
   'File complaint',
   'List complaints',
 ];
@@ -54,13 +50,13 @@ function isAdminUser(waNumber: string): boolean {
 
 const QUICK_ACTION_PHRASES: Record<string, string> = {
   'Get a loan': 'I’d like to get a loan.',
-  'View Taxi prices': 'I’d like to see local taxi prices.',
   'Add taxi price': 'I’d like to share local taxi prices.',
   'Loan a person': 'I’d like to loan money to someone.',
   'Find some info': 'I’d like to find some community info.',
   'Add info': 'I’d like to share some community info.',
   'Open a stokvel': 'I’d like to open a stokvel.',
   'Join a stokvel': 'I’d like to join a stokvel.',
+  'Create a stokvel': "I'd like to create a stokvel.",
   'Create a Listing': 'I’d like to create a community listing.',
   'Find an expert':
     'I’d like to find a listing for a local expert or technician',

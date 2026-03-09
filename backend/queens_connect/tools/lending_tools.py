@@ -437,10 +437,15 @@ def send_whatsapp_twilio(
     """
     Send a WhatsApp template message via Twilio.
 
-    - to_wa_number: bare MSISDN with leading + (e.g. +2776...)
+    - to_wa_number: MSISDN with or without + (e.g. 2776... or +2776...); normalized to E.164 for Twilio.
     - content_sid: Twilio ContentSid for approved WhatsApp template
     - content_variables: template variables as {"1": "...", "2": "..."}
     """
+    to_wa_number = (to_wa_number or "").strip()
+    if not to_wa_number:
+        return {"status": "error", "error_message": "to_wa_number required"}
+    if not to_wa_number.startswith("+"):
+        to_wa_number = "+" + to_wa_number
     account_sid = os.environ.get("TWILIO_ACCOUNT_SID") or ""
     auth_token = os.environ.get("TWILIO_AUTH_TOKEN") or ""
     from_whatsapp = os.environ.get("TWILIO_WHATSAPP_FROM") or ""
@@ -1092,7 +1097,8 @@ def accept_loan_request(
     - Lender may accept based on masked or full details; unlock is optional.
     - Create loans/{loanId} document.
     - Update loan_requests status -> "matched".
-    - Notify borrower via WhatsApp (Twilio) that a lender agreed.
+    - Notify borrower via WhatsApp (Twilio template when TWILIO_LOAN_MATCH_CONTENT_SID is set).
+    - Returns borrowerNotified: true if the WhatsApp message was sent successfully.
     """
     lender = (lender_uid or "").strip()
     req_id = (loan_request_id or "").strip()
@@ -1185,17 +1191,24 @@ def accept_loan_request(
     borrower_data = borrower_doc.to_dict() if borrower_doc.exists else {}
     borrower_name = borrower_data.get("displayName") or borrower_uid
 
-    # Notify borrower via WhatsApp (Twilio) if configured
+    # Notify borrower via WhatsApp when a lender accepts (Twilio template)
+    borrower_notified = False
     content_sid = os.environ.get("TWILIO_LOAN_MATCH_CONTENT_SID") or ""
-    if content_sid:
+    if not content_sid:
+        logger.warning(
+            "accept_loan_request: borrower WhatsApp notification skipped — set TWILIO_LOAN_MATCH_CONTENT_SID (Twilio Content SID for loan-accepted template) to notify borrower when a lender accepts."
+        )
+    else:
         try:
-            # Example variables: {"1": borrower name, "2": amount like R200}
             amount_rands = int(round(amount / 100)) if amount else 0
             content_vars = {
                 "1": borrower_name,
                 "2": f"R{amount_rands}",
             }
-            send_whatsapp_twilio(borrower_uid, content_sid, content_vars)
+            result = send_whatsapp_twilio(borrower_uid, content_sid, content_vars)
+            borrower_notified = result.get("status") == "success"
+            if borrower_notified:
+                logger.info("accept_loan_request: borrower notified via WhatsApp to=%s", borrower_uid[:6] + "***")
         except Exception as e:  # pragma: no cover - best effort
             logger.exception("accept_loan_request: WhatsApp notify failed: %s", e)
 
@@ -1221,6 +1234,7 @@ def accept_loan_request(
     return {
         "status": "success",
         "loanId": loan_ref.id,
+        "borrowerNotified": borrower_notified,
         "borrower": {
             "name": borrower_name,
             "bank": req_data.get("bank"),
