@@ -146,7 +146,7 @@ def _build_pdf_bytes(doc: dict) -> bytes:
     try:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import mm, pt
+        from reportlab.lib.units import mm
         from reportlab.lib.colors import HexColor
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
         from reportlab.lib.enums import TA_LEFT
@@ -491,8 +491,8 @@ def _build_docx_bytes(doc: dict) -> bytes:
                 cell.paragraphs[0].paragraph_format.space_after = Pt(2)
             for row in tbl.rows:
                 for cell in row.cells:
-                    for p in cell.paragraphs:
-                        for r in p.runs:
+                    for para in cell.paragraphs:
+                        for r in para.runs:
                             r.font.size = Pt(11)
                             r.font.color.rgb = RGBColor(*CHARCOAL_RGB)
             document.add_paragraph()
