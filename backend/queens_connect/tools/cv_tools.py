@@ -19,7 +19,8 @@ logger = logging.getLogger("queens_connect.tools.cv")
 # Allowed top-level keys when saving CV doc (merge only these)
 CV_TOP_LEVEL_KEYS = frozenset({
     "particulars", "education", "higherEducation", "workExperience",
-    "bio", "contact", "references", "fileLink", "format", "updatedAt",
+    "bio", "professionalSummary", "coreSkills", "contact", "references",
+    "fileLink", "format", "updatedAt",
 })
 
 # Minimum required for generation: must have these sections (content can be minimal)
@@ -93,7 +94,9 @@ def get_cv_doc(wa_number: str) -> dict:
 def save_cv_doc(wa_number: str, data: dict) -> dict:
     """
     Save or merge CV data for this user. Call with waNumber from session and a dict containing
-    any of: particulars, education, higherEducation, workExperience, bio, contact, references.
+    any of: particulars, education, higherEducation, workExperience, bio, professionalSummary,
+    coreSkills, contact, references. Optional particulars: driverLicenceCode, noticePeriod,
+    expectedSalaryRange, workPermitStatus. higherEducation items may include fieldOfStudy.
     Used after each section or at end of collection. Merges into existing doc.
     Returns status and message.
     """
@@ -103,7 +106,7 @@ def save_cv_doc(wa_number: str, data: dict) -> dict:
     # Only merge allowed top-level keys; do not allow fileLink/format to be set by agent (only generate_* set those)
     allowed = {k: v for k, v in (data or {}).items() if k in CV_TOP_LEVEL_KEYS and k not in ("fileLink", "format")}
     if not allowed:
-        return {"status": "error", "error_message": "No valid CV fields to save. Use: particulars, education, higherEducation, workExperience, bio, contact, references."}
+        return {"status": "error", "error_message": "No valid CV fields to save. Use: particulars, education, higherEducation, workExperience, bio, professionalSummary, coreSkills, contact, references."}
     try:
         from google.cloud.firestore_v1 import SERVER_TIMESTAMP
     except ImportError:
@@ -162,27 +165,42 @@ def _build_pdf_bytes(doc: dict) -> bytes:
         story.append(Spacer(1, 4))
 
     p = doc.get("particulars") or {}
+    c = doc.get("contact") or {}
     name = f"{p.get('name', '')} {p.get('surname', '')}".strip() or "CV"
     add_para(name, title_style)
+    # Header: contact line
+    contact_parts = []
+    if c.get("email"):
+        contact_parts.append(str(c.get("email", "")))
+    if c.get("contactNumber"):
+        contact_parts.append(str(c.get("contactNumber", "")))
+    if c.get("address"):
+        contact_parts.append(str(c.get("address", "")))
+    if contact_parts:
+        add_para(" | ".join(contact_parts))
     add_para(f"DOB: {p.get('dateOfBirth', '')} | Nationality: {p.get('nationality', '')} | ID: {p.get('idNumber', '')} | Gender: {p.get('gender', '')}")
     if p.get("taxNumber"):
         add_para(f"Tax number: {p.get('taxNumber')}")
     add_para(f"Criminal record: {'Yes' if p.get('hasCriminalRecord') else 'No'}")
     story.append(Spacer(1, 8))
 
-    add_para("Education", heading_style)
-    e = doc.get("education") or {}
-    add_para(f"High school: {e.get('highSchoolName', '')}. Highest grade: {e.get('highestGradePassed', '')}. Matriculated: {'Yes' + (' (' + str(e.get('matriculationYear', '')) + ')' if e.get('matriculationYear') else '') if e.get('matriculated') else 'No'}.")
-    story.append(Spacer(1, 6))
-
-    higher = doc.get("higherEducation") or []
-    if higher:
-        add_para("Higher Education", heading_style)
-        for h in higher:
-            if isinstance(h, dict):
-                add_para(f"{h.get('degreeOrDiplomaOrCertificate', '')} – {h.get('institution', '')} ({h.get('yearPassed', '')})")
+    # Professional Summary
+    summary = doc.get("professionalSummary") or doc.get("bio") or ""
+    if summary:
+        add_para("Professional Summary", heading_style)
+        add_para(summary)
         story.append(Spacer(1, 6))
 
+    # Core Skills
+    skills = doc.get("coreSkills") or []
+    if skills and isinstance(skills, list):
+        add_para("Core Skills", heading_style)
+        skills_text = " • ".join(str(s).strip() for s in skills if str(s).strip())
+        if skills_text:
+            add_para(skills_text)
+        story.append(Spacer(1, 6))
+
+    # Work Experience
     work = doc.get("workExperience") or []
     if work:
         add_para("Work Experience", heading_style)
@@ -195,18 +213,47 @@ def _build_pdf_bytes(doc: dict) -> bytes:
                 add_para(w.get("description", ""))
         story.append(Spacer(1, 6))
 
-    bio = doc.get("bio") or ""
-    if bio:
-        add_para("About", heading_style)
-        add_para(bio)
-        story.append(Spacer(1, 6))
-
-    add_para("Contact", heading_style)
-    c = doc.get("contact") or {}
-    add_para(f"Address: {c.get('address', '')}")
-    add_para(f"Email: {c.get('email', '')} | Phone: {c.get('contactNumber', '')}")
+    # Education
+    add_para("Education", heading_style)
+    e = doc.get("education") or {}
+    add_para(f"High school: {e.get('highSchoolName', '')}. Highest grade: {e.get('highestGradePassed', '')}. Matriculated: {'Yes' + (' (' + str(e.get('matriculationYear', '')) + ')' if e.get('matriculationYear') else '') if e.get('matriculated') else 'No'}.")
     story.append(Spacer(1, 6))
 
+    # Higher Education
+    higher = doc.get("higherEducation") or []
+    if higher:
+        add_para("Higher Education", heading_style)
+        for h in higher:
+            if isinstance(h, dict):
+                qual = h.get("degreeOrDiplomaOrCertificate", "") or ""
+                inst = h.get("institution", "") or ""
+                yr = h.get("yearPassed", "") or ""
+                field = h.get("fieldOfStudy", "") or ""
+                parts = [q for q in [qual, field] if q]
+                line = " – ".join(parts) if parts else qual or "Qualification"
+                if inst:
+                    line += f" – {inst}"
+                if yr:
+                    line += f" ({yr})"
+                add_para(line)
+        story.append(Spacer(1, 6))
+
+    # Additional information (optional SA fields)
+    extra = []
+    if p.get("driverLicenceCode"):
+        extra.append(f"Driver's licence: {p.get('driverLicenceCode')}")
+    if p.get("noticePeriod"):
+        extra.append(f"Notice period: {p.get('noticePeriod')}")
+    if p.get("expectedSalaryRange"):
+        extra.append(f"Expected salary: {p.get('expectedSalaryRange')}")
+    if p.get("workPermitStatus"):
+        extra.append(f"Work permit: {p.get('workPermitStatus')}")
+    if extra:
+        add_para("Additional Information", heading_style)
+        add_para(" | ".join(extra))
+        story.append(Spacer(1, 6))
+
+    # References (no duplicate Contact section - contact is in header)
     refs = doc.get("references") or []
     if refs:
         add_para("References", heading_style)
@@ -240,23 +287,34 @@ def _build_docx_bytes(doc: dict) -> bytes:
             document.add_paragraph(text)
 
     p = doc.get("particulars") or {}
+    c = doc.get("contact") or {}
     name = f"{p.get('name', '')} {p.get('surname', '')}".strip() or "CV"
     add_heading(name, 0)
+    contact_parts = []
+    if c.get("email"):
+        contact_parts.append(str(c.get("email", "")))
+    if c.get("contactNumber"):
+        contact_parts.append(str(c.get("contactNumber", "")))
+    if c.get("address"):
+        contact_parts.append(str(c.get("address", "")))
+    if contact_parts:
+        add_para(" | ".join(contact_parts))
     add_para(f"DOB: {p.get('dateOfBirth', '')} | Nationality: {p.get('nationality', '')} | ID: {p.get('idNumber', '')} | Gender: {p.get('gender', '')}")
     if p.get("taxNumber"):
         add_para(f"Tax number: {p.get('taxNumber')}")
     add_para(f"Criminal record: {'Yes' if p.get('hasCriminalRecord') else 'No'}")
 
-    add_heading("Education", level=1)
-    e = doc.get("education") or {}
-    add_para(f"High school: {e.get('highSchoolName', '')}. Highest grade: {e.get('highestGradePassed', '')}. Matriculated: {'Yes' + (' (' + str(e.get('matriculationYear', '')) + ')' if e.get('matriculationYear') else '') if e.get('matriculated') else 'No'}.")
+    summary = doc.get("professionalSummary") or doc.get("bio") or ""
+    if summary:
+        add_heading("Professional Summary", level=1)
+        add_para(summary)
 
-    higher = doc.get("higherEducation") or []
-    if higher:
-        add_heading("Higher Education", level=1)
-        for h in higher:
-            if isinstance(h, dict):
-                add_para(f"{h.get('degreeOrDiplomaOrCertificate', '')} – {h.get('institution', '')} ({h.get('yearPassed', '')})")
+    skills = doc.get("coreSkills") or []
+    if skills and isinstance(skills, list):
+        add_heading("Core Skills", level=1)
+        skills_text = " • ".join(str(s).strip() for s in skills if str(s).strip())
+        if skills_text:
+            add_para(skills_text)
 
     work = doc.get("workExperience") or []
     if work:
@@ -267,15 +325,39 @@ def _build_docx_bytes(doc: dict) -> bytes:
                 add_para(f"{w.get('position', '')} at {w.get('companyName', '')} ({w.get('year', '')})")
                 add_para(w.get("description", ""))
 
-    bio = doc.get("bio") or ""
-    if bio:
-        add_heading("About", level=1)
-        add_para(bio)
+    add_heading("Education", level=1)
+    e = doc.get("education") or {}
+    add_para(f"High school: {e.get('highSchoolName', '')}. Highest grade: {e.get('highestGradePassed', '')}. Matriculated: {'Yes' + (' (' + str(e.get('matriculationYear', '')) + ')' if e.get('matriculationYear') else '') if e.get('matriculated') else 'No'}.")
 
-    add_heading("Contact", level=1)
-    c = doc.get("contact") or {}
-    add_para(f"Address: {c.get('address', '')}")
-    add_para(f"Email: {c.get('email', '')} | Phone: {c.get('contactNumber', '')}")
+    higher = doc.get("higherEducation") or []
+    if higher:
+        add_heading("Higher Education", level=1)
+        for h in higher:
+            if isinstance(h, dict):
+                qual = h.get("degreeOrDiplomaOrCertificate", "") or ""
+                inst = h.get("institution", "") or ""
+                yr = h.get("yearPassed", "") or ""
+                field = h.get("fieldOfStudy", "") or ""
+                parts = [q for q in [qual, field] if q]
+                line = " – ".join(parts) if parts else qual or "Qualification"
+                if inst:
+                    line += f" – {inst}"
+                if yr:
+                    line += f" ({yr})"
+                add_para(line)
+
+    extra = []
+    if p.get("driverLicenceCode"):
+        extra.append(f"Driver's licence: {p.get('driverLicenceCode')}")
+    if p.get("noticePeriod"):
+        extra.append(f"Notice period: {p.get('noticePeriod')}")
+    if p.get("expectedSalaryRange"):
+        extra.append(f"Expected salary: {p.get('expectedSalaryRange')}")
+    if p.get("workPermitStatus"):
+        extra.append(f"Work permit: {p.get('workPermitStatus')}")
+    if extra:
+        add_heading("Additional Information", level=1)
+        add_para(" | ".join(extra))
 
     refs = doc.get("references") or []
     if refs:
