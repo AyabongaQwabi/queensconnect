@@ -218,5 +218,10 @@ service cloud.firestore {
     match /voucher_pool/{code} {
       allow read, write: if false;
     }
+
+    // 34. cvs – one doc per user (waNumber); user reads/writes own CV data only
+    match /cvs/{waNumber} {
+      allow read, write: if request.auth != null && request.auth.uid == waNumber;
+    }
   }
 }

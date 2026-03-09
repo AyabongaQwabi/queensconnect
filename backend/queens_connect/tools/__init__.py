@@ -87,6 +87,12 @@ from .gamification_tools import (
     redeem_voucher_tool,
     get_voucher_stock_tool,
 )
+from .cv_tools import (
+    get_cv_doc_tool,
+    save_cv_doc_tool,
+    generate_cv_pdf_tool,
+    generate_cv_docx_tool,
+)
 
 __all__ = [
     "save_community_updates_tool",
@@ -164,4 +170,8 @@ __all__ = [
     "record_upvote_tool",
     "redeem_voucher_tool",
     "get_voucher_stock_tool",
+    "get_cv_doc_tool",
+    "save_cv_doc_tool",
+    "generate_cv_pdf_tool",
+    "generate_cv_docx_tool",
 ]

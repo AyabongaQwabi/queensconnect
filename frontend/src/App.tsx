@@ -23,6 +23,7 @@ const QUICK_ACTIONS = [
   'Loan a person',
   'Open a stokvel',
   'Join a stokvel',
+  'Create / get my CV',
   'Find an expert',
   'Find some info',
   'Find lost item',
@@ -73,6 +74,7 @@ const QUICK_ACTION_PHRASES: Record<string, string> = {
   'List complaints': 'I’d like to see complaints I’ve filed.',
   'Add a cab driver': "I'd like to add a cab driver.",
   'Find a cab': "I'd like to find a cab.",
+  'Create / get my CV': "I'd like to create or get my CV.",
 };
 
 const LANGUAGE_OPTIONS = [

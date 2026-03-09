@@ -53,6 +53,7 @@ from ..sub_agents.loans_agent import loans_agent
 from ..sub_agents.lending_agent import lending_agent
 from ..sub_agents.stokvel_agent import stokvel_agent
 from ..sub_agents.gamification_agent import gamification_agent
+from ..sub_agents.cv_agent import cv_agent
 
 
 def _load_core_instruction() -> str:
@@ -136,6 +137,7 @@ def get_core_orchestrator() -> Agent:
             lending_agent,
             stokvel_agent,
             gamification_agent,
+            cv_agent,
         ],
     )
 

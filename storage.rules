@@ -1,0 +1,13 @@
+rules_version = '2';
+// Queens Connect – Firebase Storage Security Rules
+// CV files: stored under cvs/{waNumber}/cv.pdf or cv.docx. Only the owning user can read; writes via backend (Admin SDK) only.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // CV files: one folder per user (waNumber). Read allowed for owner only; write via backend only.
+    match /cvs/{waNumber}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == waNumber;
+      allow write: if false;
+    }
+  }
+}

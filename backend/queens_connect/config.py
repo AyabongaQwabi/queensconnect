@@ -21,6 +21,8 @@ GROK_MODEL = os.environ.get("GROK_MODEL", "xai/grok-4-1-fast-reasoning")
 # Firestore expects host:port only (no http://). Leave FIRESTORE_EMULATOR_HOST unset or "" for production.
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "queens-connect-2c94d")
 FIRESTORE_EMULATOR_HOST = (os.environ.get("FIRESTORE_EMULATOR_HOST") or "").strip()
+# Firebase Storage bucket for CV uploads (default: project_id.appspot.com).
+FIREBASE_STORAGE_BUCKET = os.environ.get("FIREBASE_STORAGE_BUCKET", "").strip() or None  # None => use FIREBASE_PROJECT_ID + ".appspot.com"
 FIREBASE_ID_TOKEN = ""
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")
 
@@ -45,6 +47,7 @@ LOANS_AGENT_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "loans-agent.md"
 LOANS_REGISTRATION_AGENT_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "loans-registration-agent.md"
 LENDING_AGENT_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "lending-agent.md"
 STOKVEL_AGENT_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "stokvel-agent.md"
+CV_AGENT_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "cv-agent.md"
 GROK_REWRITE_PROMPT_PATH = REPO_ROOT / "docs" / "prompts" / "grok-rewrite-system-prompt.md"
 
 # Onboarding state machine: step meaning "user finished onboarding"
