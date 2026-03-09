@@ -160,14 +160,14 @@ def _build_pdf_bytes(doc: dict) -> bytes:
     content_width = 160 * mm  # A4 210mm - 25mm margins each side
 
     styles = getSampleStyleSheet()
-    # Name: 22pt bold, navy, prominent
+    # Name: 22pt bold, navy, prominent — enough space below so contact does not overlap
     name_style = ParagraphStyle(
         name="CVName",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
         fontSize=22,
         textColor=NAVY,
-        spaceAfter=4,
+        spaceAfter=12,
         alignment=TA_LEFT,
     )
     # Contact line under name: 10pt charcoal, compact
@@ -211,6 +211,12 @@ def _build_pdf_bytes(doc: dict) -> bytes:
         alignment=TA_LEFT,
         leftIndent=0,
     )
+    # Skills section: same as body with left indent for padding under "Core Skills" heading
+    skills_body_style = ParagraphStyle(
+        name="CVSkillsBody",
+        parent=body_style,
+        leftIndent=12,
+    )
     # Subtext (company, date): 10pt
     sub_style = ParagraphStyle(
         name="CVSub",
@@ -248,6 +254,7 @@ def _build_pdf_bytes(doc: dict) -> bytes:
     if c.get("address"):
         contact_parts.append(str(c.get("address", "")))
     if contact_parts:
+        story.append(Spacer(1, 2))
         story.append(Paragraph(escape("  •  ".join(contact_parts)), contact_style))
     story.append(Paragraph(
         escape(f"DOB: {p.get('dateOfBirth', '')}  •  Nationality: {p.get('nationality', '')}  •  ID: {p.get('idNumber', '')}  •  Gender: {p.get('gender', '')}"),
@@ -288,12 +295,14 @@ def _build_pdf_bytes(doc: dict) -> bytes:
                 tbl = Table([[Paragraph(escape(left_col), body_style), Paragraph(escape(right_col), body_style)]], colWidths=[content_width / 2] * 2)
                 tbl.setStyle(TableStyle([
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (0, -1), 0),
+                    ("LEFTPADDING", (0, 0), (0, -1), 12),
+                    ("LEFTPADDING", (1, 0), (1, -1), 12),
+                    ("RIGHTPADDING", (0, 0), (0, -1), 8),
                     ("RIGHTPADDING", (1, 0), (1, -1), 8),
                 ]))
                 story.append(tbl)
             else:
-                add_para(left_col, body_style)
+                add_para(left_col, skills_body_style)
             story.append(Spacer(1, 6))
 
     # Work Experience
