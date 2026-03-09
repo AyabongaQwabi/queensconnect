@@ -142,33 +142,104 @@ def _validate_cv_for_generation(doc: dict) -> Optional[str]:
 
 
 def _build_pdf_bytes(doc: dict) -> bytes:
-    """Render CV document to PDF bytes."""
+    """Render CV document to PDF bytes. Modern single-column template with navy accents and clean typography."""
     try:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import mm
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.units import mm, pt
+        from reportlab.lib.colors import HexColor
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.enums import TA_LEFT
     except ImportError:
         raise RuntimeError("reportlab is required for PDF generation. Install with: pip install reportlab")
     buffer = io.BytesIO()
     story = []
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(name="CVTitle", parent=styles["Heading1"], fontSize=16, spaceAfter=6)
-    heading_style = ParagraphStyle(name="CVHeading", parent=styles["Heading2"], fontSize=12, spaceAfter=4)
-    body_style = styles["Normal"]
+    # Design tokens: minimalist modern — navy headings, charcoal body (ATS-safe, print-friendly)
+    NAVY = HexColor("#0A2342")
+    CHARCOAL = HexColor("#333333")
+    content_width = 160 * mm  # A4 210mm - 25mm margins each side
 
-    def add_para(text: str, style=None):
+    styles = getSampleStyleSheet()
+    # Name: 22pt bold, navy, prominent
+    name_style = ParagraphStyle(
+        name="CVName",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=22,
+        textColor=NAVY,
+        spaceAfter=4,
+        alignment=TA_LEFT,
+    )
+    # Contact line under name: 10pt charcoal, compact
+    contact_style = ParagraphStyle(
+        name="CVContact",
+        parent=styles["Normal"],
+        fontSize=10,
+        textColor=CHARCOAL,
+        spaceAfter=2,
+        alignment=TA_LEFT,
+    )
+    # Section heading: 14pt bold navy, extra space before
+    heading_style = ParagraphStyle(
+        name="CVHeading",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=14,
+        textColor=NAVY,
+        spaceBefore=14,
+        spaceAfter=6,
+        alignment=TA_LEFT,
+    )
+    # Job title in work experience: 12pt bold charcoal
+    job_title_style = ParagraphStyle(
+        name="CVJobTitle",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=12,
+        textColor=CHARCOAL,
+        spaceAfter=2,
+        alignment=TA_LEFT,
+    )
+    # Body / bullets: 11pt, 1.2 line spacing, charcoal
+    body_style = ParagraphStyle(
+        name="CVBody",
+        parent=styles["Normal"],
+        fontSize=11,
+        leading=13,
+        textColor=CHARCOAL,
+        spaceAfter=4,
+        alignment=TA_LEFT,
+        leftIndent=0,
+    )
+    # Subtext (company, date): 10pt
+    sub_style = ParagraphStyle(
+        name="CVSub",
+        parent=styles["Normal"],
+        fontSize=10,
+        textColor=CHARCOAL,
+        spaceAfter=4,
+        alignment=TA_LEFT,
+    )
+
+    def escape(s: str) -> str:
+        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def add_para(text, style=None):
+        if text is None:
+            return
+        if isinstance(text, list):
+            text = "\n".join(str(x).strip() for x in text if str(x).strip())
+        text = str(text or "").strip()
         if not text:
             return
-        safe = (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        safe = escape(text)
         story.append(Paragraph(safe, style or body_style))
         story.append(Spacer(1, 4))
 
     p = doc.get("particulars") or {}
     c = doc.get("contact") or {}
     name = f"{p.get('name', '')} {p.get('surname', '')}".strip() or "CV"
-    add_para(name, title_style)
-    # Header: contact line
+    story.append(Paragraph(escape(name), name_style))
     contact_parts = []
     if c.get("email"):
         contact_parts.append(str(c.get("email", "")))
@@ -177,52 +248,85 @@ def _build_pdf_bytes(doc: dict) -> bytes:
     if c.get("address"):
         contact_parts.append(str(c.get("address", "")))
     if contact_parts:
-        add_para(" | ".join(contact_parts))
-    add_para(f"DOB: {p.get('dateOfBirth', '')} | Nationality: {p.get('nationality', '')} | ID: {p.get('idNumber', '')} | Gender: {p.get('gender', '')}")
+        story.append(Paragraph(escape("  •  ".join(contact_parts)), contact_style))
+    story.append(Paragraph(
+        escape(f"DOB: {p.get('dateOfBirth', '')}  •  Nationality: {p.get('nationality', '')}  •  ID: {p.get('idNumber', '')}  •  Gender: {p.get('gender', '')}"),
+        contact_style,
+    ))
     if p.get("taxNumber"):
-        add_para(f"Tax number: {p.get('taxNumber')}")
-    add_para(f"Criminal record: {'Yes' if p.get('hasCriminalRecord') else 'No'}")
-    story.append(Spacer(1, 8))
+        story.append(Paragraph(escape(f"Tax number: {p.get('taxNumber')}"), contact_style))
+    story.append(Paragraph(escape(f"Criminal record: {'Yes' if p.get('hasCriminalRecord') else 'No'}"), contact_style))
+    # Horizontal rule: thin navy bar
+    hr_table = Table([[""]], colWidths=[content_width], rowHeights=[2])
+    hr_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), NAVY),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+    story.append(hr_table)
+    story.append(Spacer(1, 12))
 
     # Professional Summary
     summary = doc.get("professionalSummary") or doc.get("bio") or ""
     if summary:
-        add_para("Professional Summary", heading_style)
-        add_para(summary)
+        story.append(Paragraph("Professional Summary", heading_style))
+        story.append(Spacer(1, 2))
+        add_para(summary, body_style)
         story.append(Spacer(1, 6))
 
-    # Core Skills
+    # Core Skills — two-column pill-style list
     skills = doc.get("coreSkills") or []
     if skills and isinstance(skills, list):
-        add_para("Core Skills", heading_style)
-        skills_text = " • ".join(str(s).strip() for s in skills if str(s).strip())
-        if skills_text:
-            add_para(skills_text)
-        story.append(Spacer(1, 6))
+        skill_strs = [str(s).strip() for s in skills if str(s).strip()]
+        if skill_strs:
+            story.append(Paragraph("Core Skills", heading_style))
+            story.append(Spacer(1, 2))
+            # Build two columns: left and right
+            mid = (len(skill_strs) + 1) // 2
+            left_col = "  •  ".join(skill_strs[:mid])
+            right_col = "  •  ".join(skill_strs[mid:]) if mid < len(skill_strs) else ""
+            if right_col:
+                tbl = Table([[Paragraph(escape(left_col), body_style), Paragraph(escape(right_col), body_style)]], colWidths=[content_width / 2] * 2)
+                tbl.setStyle(TableStyle([
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (0, -1), 0),
+                    ("RIGHTPADDING", (1, 0), (1, -1), 8),
+                ]))
+                story.append(tbl)
+            else:
+                add_para(left_col, body_style)
+            story.append(Spacer(1, 6))
 
     # Work Experience
     work = doc.get("workExperience") or []
     if work:
-        add_para("Work Experience", heading_style)
+        story.append(Paragraph("Work Experience", heading_style))
+        story.append(Spacer(1, 2))
         for w in work:
             if isinstance(w, dict):
-                pos = (w.get("position") or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                company = (w.get("companyName") or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                year = (w.get("year") or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                add_para(f"<b>{pos}</b> at {company} ({year})")
-                add_para(w.get("description", ""))
-        story.append(Spacer(1, 6))
+                pos = w.get("position") or ""
+                company = w.get("companyName") or ""
+                year = w.get("year") or ""
+                story.append(Paragraph(escape(pos), job_title_style))
+                story.append(Paragraph(escape(f"{company} — {year}"), sub_style))
+                desc = w.get("description", "")
+                if isinstance(desc, list):
+                    desc = "\n".join(str(x).strip() for x in desc if str(x).strip())
+                if str(desc).strip():
+                    add_para(desc, body_style)
+                story.append(Spacer(1, 8))
 
     # Education
-    add_para("Education", heading_style)
+    story.append(Paragraph("Education", heading_style))
+    story.append(Spacer(1, 2))
     e = doc.get("education") or {}
-    add_para(f"High school: {e.get('highSchoolName', '')}. Highest grade: {e.get('highestGradePassed', '')}. Matriculated: {'Yes' + (' (' + str(e.get('matriculationYear', '')) + ')' if e.get('matriculationYear') else '') if e.get('matriculated') else 'No'}.")
+    add_para(f"High school: {e.get('highSchoolName', '')}. Highest grade: {e.get('highestGradePassed', '')}. Matriculated: {'Yes' + (' (' + str(e.get('matriculationYear', '')) + ')' if e.get('matriculationYear') else '') if e.get('matriculated') else 'No'}.", body_style)
     story.append(Spacer(1, 6))
 
     # Higher Education
     higher = doc.get("higherEducation") or []
     if higher:
-        add_para("Higher Education", heading_style)
+        story.append(Paragraph("Higher Education", heading_style))
+        story.append(Spacer(1, 2))
         for h in higher:
             if isinstance(h, dict):
                 qual = h.get("degreeOrDiplomaOrCertificate", "") or ""
@@ -235,10 +339,10 @@ def _build_pdf_bytes(doc: dict) -> bytes:
                     line += f" – {inst}"
                 if yr:
                     line += f" ({yr})"
-                add_para(line)
+                add_para(line, body_style)
         story.append(Spacer(1, 6))
 
-    # Additional information (optional SA fields)
+    # Additional Information
     extra = []
     if p.get("driverLicenceCode"):
         extra.append(f"Driver's licence: {p.get('driverLicenceCode')}")
@@ -249,47 +353,105 @@ def _build_pdf_bytes(doc: dict) -> bytes:
     if p.get("workPermitStatus"):
         extra.append(f"Work permit: {p.get('workPermitStatus')}")
     if extra:
-        add_para("Additional Information", heading_style)
-        add_para(" | ".join(extra))
+        story.append(Paragraph("Additional Information", heading_style))
+        story.append(Spacer(1, 2))
+        add_para("  •  ".join(extra), body_style)
         story.append(Spacer(1, 6))
 
-    # References (no duplicate Contact section - contact is in header)
+    # References
     refs = doc.get("references") or []
     if refs:
-        add_para("References", heading_style)
+        story.append(Paragraph("References", heading_style))
+        story.append(Spacer(1, 2))
         for r in refs:
             if isinstance(r, dict):
-                add_para(f"{r.get('name', '')} – {r.get('relationship', '')}: {r.get('contactDetail', '')}")
+                add_para(f"{r.get('name', '')} – {r.get('relationship', '')}: {r.get('contactDetail', '')}", body_style)
 
-    pdf = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20 * mm, leftMargin=20 * mm, topMargin=15 * mm, bottomMargin=15 * mm)
+    margin = 25 * mm
+    pdf = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=margin,
+        rightMargin=margin,
+        topMargin=20 * mm,
+        bottomMargin=20 * mm,
+    )
     pdf.build(story)
     return buffer.getvalue()
 
 
 def _build_docx_bytes(doc: dict) -> bytes:
-    """Render CV document to DOCX bytes."""
+    """Render CV document to DOCX bytes. Modern single-column template with navy accents and clean typography."""
     try:
         from docx import Document
-        from docx.shared import Pt
+        from docx.shared import Pt, Inches, RGBColor
+        from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
     except ImportError:
         raise RuntimeError("python-docx is required for DOCX generation. Install with: pip install python-docx")
     buffer = io.BytesIO()
     document = Document()
-    style = document.styles["Normal"]
-    style.font.size = Pt(11)
+    # Margins: ~1 inch
+    for section in document.sections:
+        section.top_margin = Inches(0.8)
+        section.bottom_margin = Inches(0.8)
+        section.left_margin = Inches(0.8)
+        section.right_margin = Inches(0.8)
 
-    def add_heading(text: str, level: int = 1):
-        if text:
-            document.add_heading(text, level=level)
+    # Navy #0A2342 and charcoal #333333 (RGB)
+    NAVY_RGB = (10, 35, 66)
+    CHARCOAL_RGB = (51, 51, 51)
 
-    def add_para(text: str):
-        if text:
-            document.add_paragraph(text)
+    def add_heading_navy(text: str, level: int = 1):
+        if not text:
+            return
+        p = document.add_heading(text, level=level)
+        for run in p.runs:
+            run.font.size = Pt(14)
+            run.font.bold = True
+            run.font.color.rgb = RGBColor(*NAVY_RGB)
+
+    def add_hr_navy():
+        p = document.add_paragraph()
+        p.paragraph_format.space_before = Pt(4)
+        p.paragraph_format.space_after = Pt(12)
+        p_border = OxmlElement("w:pBdr")
+        bottom = OxmlElement("w:bottom")
+        bottom.set(qn("w:val"), "single")
+        bottom.set(qn("w:sz"), "12")
+        bottom.set(qn("w:space"), "1")
+        bottom.set(qn("w:color"), "0A2342")
+        p_border.append(bottom)
+        p._p.get_or_add_pPr().append(p_border)
+
+    def add_para(text, font_size_pt=11, bold=False, color_rgb=None):
+        if text is None:
+            return
+        if isinstance(text, list):
+            text = "\n".join(str(x).strip() for x in text if str(x).strip())
+        text = str(text or "").strip()
+        if not text:
+            return
+        p = document.add_paragraph()
+        p.paragraph_format.space_after = Pt(4)
+        run = p.add_run(text)
+        run.font.size = Pt(font_size_pt)
+        run.font.bold = bold
+        if color_rgb:
+            run.font.color.rgb = RGBColor(*color_rgb)
+        else:
+            run.font.color.rgb = RGBColor(*CHARCOAL_RGB)
 
     p = doc.get("particulars") or {}
     c = doc.get("contact") or {}
     name = f"{p.get('name', '')} {p.get('surname', '')}".strip() or "CV"
-    add_heading(name, 0)
+    name_para = document.add_paragraph()
+    name_run = name_para.add_run(name)
+    name_run.font.size = Pt(22)
+    name_run.font.bold = True
+    name_run.font.color.rgb = RGBColor(*NAVY_RGB)
+    name_para.paragraph_format.space_after = Pt(4)
+
     contact_parts = []
     if c.get("email"):
         contact_parts.append(str(c.get("email", "")))
@@ -298,40 +460,68 @@ def _build_docx_bytes(doc: dict) -> bytes:
     if c.get("address"):
         contact_parts.append(str(c.get("address", "")))
     if contact_parts:
-        add_para(" | ".join(contact_parts))
-    add_para(f"DOB: {p.get('dateOfBirth', '')} | Nationality: {p.get('nationality', '')} | ID: {p.get('idNumber', '')} | Gender: {p.get('gender', '')}")
+        add_para("  •  ".join(contact_parts), font_size_pt=10)
+    add_para(f"DOB: {p.get('dateOfBirth', '')}  •  Nationality: {p.get('nationality', '')}  •  ID: {p.get('idNumber', '')}  •  Gender: {p.get('gender', '')}", font_size_pt=10)
     if p.get("taxNumber"):
-        add_para(f"Tax number: {p.get('taxNumber')}")
-    add_para(f"Criminal record: {'Yes' if p.get('hasCriminalRecord') else 'No'}")
+        add_para(f"Tax number: {p.get('taxNumber')}", font_size_pt=10)
+    add_para(f"Criminal record: {'Yes' if p.get('hasCriminalRecord') else 'No'}", font_size_pt=10)
+    add_hr_navy()
 
     summary = doc.get("professionalSummary") or doc.get("bio") or ""
     if summary:
-        add_heading("Professional Summary", level=1)
-        add_para(summary)
+        add_heading_navy("Professional Summary", level=1)
+        document.paragraphs[-1].paragraph_format.space_before = Pt(14)
+        add_para(summary, font_size_pt=11)
 
     skills = doc.get("coreSkills") or []
     if skills and isinstance(skills, list):
-        add_heading("Core Skills", level=1)
-        skills_text = " • ".join(str(s).strip() for s in skills if str(s).strip())
-        if skills_text:
-            add_para(skills_text)
+        skill_strs = [str(s).strip() for s in skills if str(s).strip()]
+        if skill_strs:
+            add_heading_navy("Core Skills", level=1)
+            document.paragraphs[-1].paragraph_format.space_before = Pt(14)
+            mid = (len(skill_strs) + 1) // 2
+            left_col = "  •  ".join(skill_strs[:mid])
+            right_col = "  •  ".join(skill_strs[mid:]) if mid < len(skill_strs) else ""
+            tbl = document.add_table(rows=1, cols=2)
+            tbl.cell(0, 0).text = left_col
+            tbl.cell(0, 1).text = right_col
+            for cell in tbl.columns[0].cells:
+                cell.paragraphs[0].paragraph_format.space_after = Pt(2)
+            for cell in tbl.columns[1].cells:
+                cell.paragraphs[0].paragraph_format.space_after = Pt(2)
+            for row in tbl.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        for r in p.runs:
+                            r.font.size = Pt(11)
+                            r.font.color.rgb = RGBColor(*CHARCOAL_RGB)
+            document.add_paragraph()
 
     work = doc.get("workExperience") or []
     if work:
-        add_heading("Work Experience", level=1)
+        add_heading_navy("Work Experience", level=1)
+        document.paragraphs[-1].paragraph_format.space_before = Pt(14)
         for w in work:
             if isinstance(w, dict):
                 document.add_paragraph()
-                add_para(f"{w.get('position', '')} at {w.get('companyName', '')} ({w.get('year', '')})")
-                add_para(w.get("description", ""))
+                add_para(w.get("position", ""), font_size_pt=12, bold=True)
+                add_para(f"{w.get('companyName', '')} — {w.get('year', '')}", font_size_pt=10)
+                desc = w.get("description", "")
+                if isinstance(desc, list):
+                    desc = "\n".join(str(x).strip() for x in desc if str(x).strip())
+                if str(desc).strip():
+                    add_para(desc, font_size_pt=11)
+                document.add_paragraph()
 
-    add_heading("Education", level=1)
+    add_heading_navy("Education", level=1)
+    document.paragraphs[-1].paragraph_format.space_before = Pt(14)
     e = doc.get("education") or {}
-    add_para(f"High school: {e.get('highSchoolName', '')}. Highest grade: {e.get('highestGradePassed', '')}. Matriculated: {'Yes' + (' (' + str(e.get('matriculationYear', '')) + ')' if e.get('matriculationYear') else '') if e.get('matriculated') else 'No'}.")
+    add_para(f"High school: {e.get('highSchoolName', '')}. Highest grade: {e.get('highestGradePassed', '')}. Matriculated: {'Yes' + (' (' + str(e.get('matriculationYear', '')) + ')' if e.get('matriculationYear') else '') if e.get('matriculated') else 'No'}.", font_size_pt=11)
 
     higher = doc.get("higherEducation") or []
     if higher:
-        add_heading("Higher Education", level=1)
+        add_heading_navy("Higher Education", level=1)
+        document.paragraphs[-1].paragraph_format.space_before = Pt(14)
         for h in higher:
             if isinstance(h, dict):
                 qual = h.get("degreeOrDiplomaOrCertificate", "") or ""
@@ -344,7 +534,7 @@ def _build_docx_bytes(doc: dict) -> bytes:
                     line += f" – {inst}"
                 if yr:
                     line += f" ({yr})"
-                add_para(line)
+                add_para(line, font_size_pt=11)
 
     extra = []
     if p.get("driverLicenceCode"):
@@ -356,15 +546,17 @@ def _build_docx_bytes(doc: dict) -> bytes:
     if p.get("workPermitStatus"):
         extra.append(f"Work permit: {p.get('workPermitStatus')}")
     if extra:
-        add_heading("Additional Information", level=1)
-        add_para(" | ".join(extra))
+        add_heading_navy("Additional Information", level=1)
+        document.paragraphs[-1].paragraph_format.space_before = Pt(14)
+        add_para("  •  ".join(extra), font_size_pt=11)
 
     refs = doc.get("references") or []
     if refs:
-        add_heading("References", level=1)
+        add_heading_navy("References", level=1)
+        document.paragraphs[-1].paragraph_format.space_before = Pt(14)
         for r in refs:
             if isinstance(r, dict):
-                add_para(f"{r.get('name', '')} – {r.get('relationship', '')}: {r.get('contactDetail', '')}")
+                add_para(f"{r.get('name', '')} – {r.get('relationship', '')}: {r.get('contactDetail', '')}", font_size_pt=11)
 
     document.save(buffer)
     return buffer.getvalue()

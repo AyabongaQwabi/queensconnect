@@ -32,6 +32,24 @@ export function InteractiveBlock({
     }
   };
 
+  if (spec.type === 'link') {
+    return (
+      <div className='mt-3 flex flex-wrap gap-2'>
+        {spec.options.map((opt) => (
+          <a
+            key={opt.value}
+            href={opt.value}
+            target='_blank'
+            rel='noopener noreferrer'
+            className='rounded-xl border border-[#7c3aed] bg-[#ede9fe] text-[#5b21b6] hover:bg-[#ddd6fe] disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-medium transition-colors no-underline inline-block'
+          >
+            {opt.label}
+          </a>
+        ))}
+      </div>
+    );
+  }
+
   if (spec.type === 'buttons') {
     return (
       <div className='mt-3 flex flex-wrap gap-2'>

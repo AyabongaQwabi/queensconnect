@@ -99,7 +99,7 @@ function getStoredLanguagePref(): LanguagePref {
 export type InteractiveOption = { value: string; label: string };
 
 export type InteractiveSpec = {
-  type: 'buttons' | 'dropdown' | 'radio' | 'checkboxes';
+  type: 'buttons' | 'dropdown' | 'radio' | 'checkboxes' | 'link';
   name: string;
   label?: string | null;
   options: InteractiveOption[];

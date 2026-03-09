@@ -80,11 +80,43 @@ class InteractiveOption(BaseModel):
 
 
 class InteractiveSpec(BaseModel):
-    type: str  # "buttons" | "dropdown" | "radio" | "checkboxes"
+    type: str  # "buttons" | "dropdown" | "radio" | "checkboxes" | "link"
     name: str
     label: str | None = None
     options: list[InteractiveOption]
     submitLabel: str | None = None
+
+
+# Pattern for CV download URLs (Google Cloud Storage / Firebase Storage)
+_CV_URL_PATTERN = re.compile(
+    r"https://[^\s\)\]\>]+(?:storage\.googleapis\.com|firebasestorage\.app|firebasestorage\.com)[^\s\)\]\>]*",
+    re.IGNORECASE,
+)
+
+
+def _extract_cv_download_interactive(reply: str) -> tuple[str, InteractiveSpec | None]:
+    """
+    If reply contains a CV download URL, return (cleaned_reply, link_spec) so the
+    frontend can show a Download button. Otherwise return (reply, None).
+    """
+    if not reply:
+        return reply, None
+    match = _CV_URL_PATTERN.search(reply)
+    if not match:
+        return reply, None
+    url = match.group(0)
+    cleaned = _CV_URL_PATTERN.sub("", reply).strip()
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    if "button" not in cleaned.lower() and "below" not in cleaned.lower():
+        cleaned = (cleaned.rstrip() + "\n\nUse the button below to download.").strip()
+    spec = InteractiveSpec(
+        type="link",
+        name="cv_download",
+        label=None,
+        options=[InteractiveOption(value=url, label="Download CV")],
+        submitLabel=None,
+    )
+    return cleaned, spec
 
 
 class ChatResponse(BaseModel):
@@ -189,7 +221,9 @@ async def chat(request: ChatRequest):
             message=request.message.strip(),
             language_pref=request.language_pref,
         )
-        interactive = _get_interactive_spec(request.wa_number)
+        # If reply contains a CV download URL, show a Download button instead of the long link
+        reply, cv_interactive = _extract_cv_download_interactive(reply)
+        interactive = cv_interactive if cv_interactive is not None else _get_interactive_spec(request.wa_number)
         append_web_chat_message(
             request.wa_number,
             "bot",
@@ -222,14 +256,16 @@ async def _stream_chat_generator(wa_number: str, message: str, language_pref: st
         return
     yield f"data: {json.dumps({'text': raw_reply})}\n\n"
     elapsed_ms = int((time.perf_counter() - start) * 1000)
-    interactive = _get_interactive_spec(wa_number)
+    # If reply contains a CV download URL, show a Download button instead of the long link
+    reply_for_store, cv_interactive = _extract_cv_download_interactive(raw_reply)
+    interactive = cv_interactive if cv_interactive is not None else _get_interactive_spec(wa_number)
     append_web_chat_message(
         wa_number,
         "bot",
-        raw_reply,
+        reply_for_store,
         metadata={"interactive": interactive.model_dump()} if interactive else None,
     )
-    done_payload = {"done": True, "reply": raw_reply, "responseTimeMs": elapsed_ms}
+    done_payload = {"done": True, "reply": reply_for_store, "responseTimeMs": elapsed_ms}
     if interactive is not None:
         done_payload["interactive"] = interactive.model_dump()
     yield f"data: {json.dumps(done_payload)}\n\n"
