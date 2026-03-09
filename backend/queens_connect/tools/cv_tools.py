@@ -254,7 +254,7 @@ def _build_pdf_bytes(doc: dict) -> bytes:
     if c.get("address"):
         contact_parts.append(str(c.get("address", "")))
     if contact_parts:
-        story.append(Spacer(1, 2))
+        story.append(Spacer(1, 3))
         story.append(Paragraph(escape("  •  ".join(contact_parts)), contact_style))
     story.append(Paragraph(
         escape(f"DOB: {p.get('dateOfBirth', '')}  •  Nationality: {p.get('nationality', '')}  •  ID: {p.get('idNumber', '')}  •  Gender: {p.get('gender', '')}"),
@@ -296,7 +296,7 @@ def _build_pdf_bytes(doc: dict) -> bytes:
                 tbl.setStyle(TableStyle([
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                     ("LEFTPADDING", (0, 0), (0, -1), 12),
-                    ("LEFTPADDING", (1, 0), (1, -1), 12),
+                    ("LEFTPADDING", (0, 1), (0, -1), 12),
                     ("RIGHTPADDING", (0, 0), (0, -1), 8),
                     ("RIGHTPADDING", (1, 0), (1, -1), 8),
                 ]))
