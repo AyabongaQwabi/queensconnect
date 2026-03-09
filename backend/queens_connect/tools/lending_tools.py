@@ -81,8 +81,8 @@ def create_verification_link(
     url = data.get("url")
     if not session_id or not session_token or not url:
         return {"status": "error", "error_message": "Didit response missing session_id, session_token or url."}
-    #out = update_user(wa, {"diditSessionId": session_id, "diditSessionToken": session_token})
-    out = update_user(wa, {"diditSessionId": "4c1aa613-e5ba-402b-8aa5-81e5ff893fd6", "diditSessionToken": session_token})
+    out = update_user(wa, {"diditSessionId": session_id, "diditSessionToken": session_token})
+    #out = update_user(wa, {"diditSessionId": "4c1aa613-e5ba-402b-8aa5-81e5ff893fd6", "diditSessionToken": session_token})
     if out.get("status") != "success":
         return {"status": "error", "error_message": out.get("error_message", "Could not save session to user.")}
     logger.info("create_verification_link wa=%s session_id=%s", wa[:6] + "***", session_id)
