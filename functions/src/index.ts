@@ -30,6 +30,8 @@ import type {
   NotifyStokvelNewMemberInput,
 } from "./types";
 
+import Parser from "rss-parser";
+
 admin.initializeApp();
 const db = admin.firestore();
 const FieldValue = admin.firestore.FieldValue;
@@ -1075,6 +1077,7 @@ export const uploadProofOfPayment = functions.https.onCall(async (data: UploadPr
 // ---------- Helpers for Komani News import ----------
 
 const KOMANI_NEWS_URL = "https://www.komani.co.za/wp-json/wp/v2/posts?per_page=5";
+const THE_REP_FEED_URL = "https://www.therep.co.za/feed/";
 
 /** Strip HTML tags and normalize whitespace. */
 function stripHtml(html: string): string {
@@ -1187,6 +1190,71 @@ export const importKomaniNews = functions.pubsub
       console.log("KASI-ORACLE: importKomaniNews imported", imported);
     } catch (err) {
       console.error("KASI-ORACLE: importKomaniNews error", err);
+    }
+    return null;
+  });
+
+// ---------- Scheduled: importTheRepFeed ----------
+
+/** Hourly (5 min past): fetch The Rep RSS feed, dedupe by sourceId, write to news collection. */
+export const importTheRepFeed = functions.pubsub
+  .schedule("5 * * * *")
+  .timeZone("Africa/Johannesburg")
+  .onRun(async () => {
+    try {
+      const res = await fetch(THE_REP_FEED_URL);
+      if (!res.ok) {
+        console.warn("KASI-ORACLE: importTheRepFeed fetch failed", res.status, res.statusText);
+        return null;
+      }
+      const xml = await res.text();
+      const parser = new Parser();
+      const feed = await parser.parseString(xml);
+      const items = Array.isArray(feed.items) ? feed.items.slice(0, 5) : [];
+      let imported = 0;
+      for (const item of items) {
+        const link = item.link?.trim();
+        if (!link) continue;
+        const guid = typeof item.guid === "string" ? item.guid : (item as { guid?: string }).guid;
+        const idFromGuid = guid ? (() => {
+          try {
+            const m = /[?&]p=(\d+)/.exec(guid);
+            return m ? m[1] : null;
+          } catch {
+            return null;
+          }
+        })() : null;
+        const sourceId = idFromGuid ? `therep-${idFromGuid}` : `therep-${link.replace(/[^a-z0-9-]/gi, "-").replace(/-+/g, "-").slice(0, 80)}`;
+        const existing = await db.collection("news").where("sourceId", "==", sourceId).limit(1).get();
+        if (!existing.empty) continue;
+        const titleRaw = item.title ?? "";
+        const title = decodeEntities(stripHtml(titleRaw)) || "Untitled";
+        const summaryRaw = item.content ?? item.contentSnippet ?? item.description ?? "";
+        const summaryEn = stripHtml(summaryRaw).slice(0, 300) || null;
+        const categories = item.categories;
+        const tags = Array.isArray(categories) && categories.length > 0
+          ? categories.map((c) => String(c).trim()).filter(Boolean)
+          : ["the-rep"];
+        const pubDate = item.pubDate ?? item.isoDate;
+        const createdAt = pubDate
+          ? admin.firestore.Timestamp.fromDate(new Date(pubDate))
+          : admin.firestore.Timestamp.now();
+        const doc = {
+          title,
+          link,
+          sourceUrl: link,
+          summaryEn,
+          tags,
+          authorUid: "therep-import",
+          createdAt,
+          sourceId,
+        };
+        await db.collection("news").add(doc);
+        imported++;
+      }
+      console.log("KASI-ORACLE: importTheRepFeed imported", imported);
+    } catch (err) {
+      console.error("KASI-ORACLE: importTheRepFeed error", err);
     }
     return null;
   });

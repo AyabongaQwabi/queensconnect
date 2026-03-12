@@ -36,10 +36,14 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onTransportFareUpdated = exports.onInfoBitCreated = exports.expirePendingGamificationItems = exports.expireOldInfoBits = exports.importKomaniNews = exports.uploadProofOfPayment = exports.unlockLoanRequests = exports.getLoanRequestsBatch = exports.createLoanRequest = exports.checkVerificationResult = exports.createVerificationSession = exports.getCommunityUpdates = exports.reportContent = exports.addLostAndFound = exports.getWalletBalance = exports.ikhokhaWebhook = exports.createIkhokhaPaymentLink = exports.sendNegotiationMessage = exports.startNegotiation = exports.searchEverything = exports.createListing = exports.addInfoBit = exports.updateUserProfile = exports.createUserIfNotExists = exports.orchestratorCall = exports.webhookWhatsApp = void 0;
+exports.onTransportFareUpdated = exports.onInfoBitCreated = exports.expirePendingGamificationItems = exports.expireOldInfoBits = exports.importTheRepFeed = exports.importKomaniNews = exports.uploadProofOfPayment = exports.unlockLoanRequests = exports.getLoanRequestsBatch = exports.createLoanRequest = exports.checkVerificationResult = exports.createVerificationSession = exports.getCommunityUpdates = exports.reportContent = exports.addLostAndFound = exports.getWalletBalance = exports.ikhokhaWebhook = exports.createIkhokhaPaymentLink = exports.sendNegotiationMessage = exports.startNegotiation = exports.searchEverything = exports.createListing = exports.addInfoBit = exports.updateUserProfile = exports.createUserIfNotExists = exports.orchestratorCall = exports.webhookWhatsApp = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
+const rss_parser_1 = __importDefault(require("rss-parser"));
 admin.initializeApp();
 const db = admin.firestore();
 const FieldValue = admin.firestore.FieldValue;
@@ -956,6 +960,7 @@ exports.uploadProofOfPayment = functions.https.onCall(async (data, context) => {
 });
 // ---------- Helpers for Komani News import ----------
 const KOMANI_NEWS_URL = "https://www.komani.co.za/wp-json/wp/v2/posts?per_page=5";
+const THE_REP_FEED_URL = "https://www.therep.co.za/feed/";
 /** Strip HTML tags and normalize whitespace. */
 function stripHtml(html) {
     if (!html || typeof html !== "string")
@@ -1060,6 +1065,74 @@ exports.importKomaniNews = functions.pubsub
     }
     catch (err) {
         console.error("KASI-ORACLE: importKomaniNews error", err);
+    }
+    return null;
+});
+// ---------- Scheduled: importTheRepFeed ----------
+/** Hourly (5 min past): fetch The Rep RSS feed, dedupe by sourceId, write to news collection. */
+exports.importTheRepFeed = functions.pubsub
+    .schedule("5 * * * *")
+    .timeZone("Africa/Johannesburg")
+    .onRun(async () => {
+    var _a, _b, _c, _d, _e, _f;
+    try {
+        const res = await fetch(THE_REP_FEED_URL);
+        if (!res.ok) {
+            console.warn("KASI-ORACLE: importTheRepFeed fetch failed", res.status, res.statusText);
+            return null;
+        }
+        const xml = await res.text();
+        const parser = new rss_parser_1.default();
+        const feed = await parser.parseString(xml);
+        const items = Array.isArray(feed.items) ? feed.items.slice(0, 5) : [];
+        let imported = 0;
+        for (const item of items) {
+            const link = (_a = item.link) === null || _a === void 0 ? void 0 : _a.trim();
+            if (!link)
+                continue;
+            const guid = typeof item.guid === "string" ? item.guid : item.guid;
+            const idFromGuid = guid ? (() => {
+                try {
+                    const m = /[?&]p=(\d+)/.exec(guid);
+                    return m ? m[1] : null;
+                }
+                catch (_a) {
+                    return null;
+                }
+            })() : null;
+            const sourceId = idFromGuid ? `therep-${idFromGuid}` : `therep-${link.replace(/[^a-z0-9-]/gi, "-").replace(/-+/g, "-").slice(0, 80)}`;
+            const existing = await db.collection("news").where("sourceId", "==", sourceId).limit(1).get();
+            if (!existing.empty)
+                continue;
+            const titleRaw = (_b = item.title) !== null && _b !== void 0 ? _b : "";
+            const title = decodeEntities(stripHtml(titleRaw)) || "Untitled";
+            const summaryRaw = (_e = (_d = (_c = item.content) !== null && _c !== void 0 ? _c : item.contentSnippet) !== null && _d !== void 0 ? _d : item.description) !== null && _e !== void 0 ? _e : "";
+            const summaryEn = stripHtml(summaryRaw).slice(0, 300) || null;
+            const categories = item.categories;
+            const tags = Array.isArray(categories) && categories.length > 0
+                ? categories.map((c) => String(c).trim()).filter(Boolean)
+                : ["the-rep"];
+            const pubDate = (_f = item.pubDate) !== null && _f !== void 0 ? _f : item.isoDate;
+            const createdAt = pubDate
+                ? admin.firestore.Timestamp.fromDate(new Date(pubDate))
+                : admin.firestore.Timestamp.now();
+            const doc = {
+                title,
+                link,
+                sourceUrl: link,
+                summaryEn,
+                tags,
+                authorUid: "therep-import",
+                createdAt,
+                sourceId,
+            };
+            await db.collection("news").add(doc);
+            imported++;
+        }
+        console.log("KASI-ORACLE: importTheRepFeed imported", imported);
+    }
+    catch (err) {
+        console.error("KASI-ORACLE: importTheRepFeed error", err);
     }
     return null;
 });
