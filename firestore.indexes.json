@@ -133,11 +133,6 @@
     {
       "collectionGroup": "stokvels",
       "queryScope": "COLLECTION",
-      "fields": [{ "fieldPath": "createdAt", "order": "DESCENDING" }]
-    },
-    {
-      "collectionGroup": "stokvels",
-      "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "ownerWaNumber", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
