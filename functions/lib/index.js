@@ -37,7 +37,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onTransportFareUpdated = exports.onInfoBitCreated = exports.expireOldInfoBits = exports.checkVerificationResult = exports.createVerificationSession = exports.getCommunityUpdates = exports.reportContent = exports.addLostAndFound = exports.getWalletBalance = exports.ikhokhaWebhook = exports.createIkhokhaPaymentLink = exports.sendNegotiationMessage = exports.startNegotiation = exports.searchEverything = exports.createListing = exports.addInfoBit = exports.updateUserProfile = exports.createUserIfNotExists = exports.orchestratorCall = exports.webhookWhatsApp = void 0;
+exports.onTransportFareUpdated = exports.onInfoBitCreated = exports.expirePendingGamificationItems = exports.expireOldInfoBits = exports.importKomaniNews = exports.uploadProofOfPayment = exports.unlockLoanRequests = exports.getLoanRequestsBatch = exports.createLoanRequest = exports.checkVerificationResult = exports.createVerificationSession = exports.getCommunityUpdates = exports.reportContent = exports.addLostAndFound = exports.getWalletBalance = exports.ikhokhaWebhook = exports.createIkhokhaPaymentLink = exports.sendNegotiationMessage = exports.startNegotiation = exports.searchEverything = exports.createListing = exports.addInfoBit = exports.updateUserProfile = exports.createUserIfNotExists = exports.orchestratorCall = exports.webhookWhatsApp = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
@@ -47,6 +47,15 @@ const FieldValue = admin.firestore.FieldValue;
 /** Log action for analytics / debugging. */
 function logAnalytics(action, uid, extra) {
     console.log("KASI-ORACLE:", action, uid, extra !== undefined ? JSON.stringify(extra) : "");
+}
+/** Generate 6-char alphanumeric code for pending InfoBits/transportFares (upvote flow). */
+function generateShortCode() {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let code = "";
+    for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
 }
 /** Notify watchers when transport fare changes (writes to notifications). */
 async function notifyWatchers(fareId, routeKey, priceCents, location) {
@@ -154,6 +163,8 @@ exports.orchestratorCall = functions.https.onCall(async (data, context) => {
                 return ok(await createVerificationSessionImpl(uid, payload));
             case "checkVerificationResult":
                 return ok(await checkVerificationResultImpl(uid, payload));
+            case "notifyStokvelNewMember":
+                return ok(await notifyStokvelNewMemberImpl(uid, payload));
             default:
                 return err("Unknown action: " + action);
         }
@@ -251,6 +262,7 @@ async function addInfoBitImpl(uid, input) {
         t.setHours(t.getHours() + expiresHours);
         expiresAt = admin.firestore.Timestamp.fromDate(t);
     }
+    const shortCode = generateShortCode();
     const ref = await db.collection("infoBits").add({
         authorUid: uid,
         text,
@@ -258,10 +270,13 @@ async function addInfoBitImpl(uid, input) {
         location: location !== null && location !== void 0 ? location : null,
         expiresAt,
         createdAt: now,
-        upvotes: 0,
+        status: "pending",
+        shortCode,
+        upvoteWaNumbers: [],
+        pendingCreatedAt: now,
     });
     logAnalytics("addInfoBit", uid, { infoBitId: ref.id });
-    return { infoBitId: ref.id };
+    return { infoBitId: ref.id, shortCode };
 }
 exports.addInfoBit = functions.https.onCall(async (data, context) => {
     const uid = requireAuth(context);
@@ -419,6 +434,35 @@ exports.sendNegotiationMessage = functions.https.onCall(async (data, context) =>
     const uid = requireAuth(context);
     return ok(await sendNegotiationMessageImpl(uid, data));
 });
+// ---------- notifyStokvelNewMember (used via orchestratorCall) ----------
+async function notifyStokvelNewMemberImpl(uid, input) {
+    const { stokvelId, newMemberWaNumber, newMemberName } = input;
+    if (!stokvelId) {
+        throw new functions.https.HttpsError("invalid-argument", "stokvelId required.");
+    }
+    const memberWa = (newMemberWaNumber !== null && newMemberWaNumber !== void 0 ? newMemberWaNumber : uid).trim();
+    if (memberWa !== uid) {
+        throw new functions.https.HttpsError("permission-denied", "Only the joining member can trigger this.");
+    }
+    const stokvelSnap = await db.collection("stokvels").doc(stokvelId).get();
+    if (!stokvelSnap.exists) {
+        throw new functions.https.HttpsError("not-found", "Stokvel not found.");
+    }
+    const stokvel = stokvelSnap.data();
+    const ownerWaNumber = stokvel.ownerWaNumber || "";
+    const stokvelName = stokvel.name || "Stokvel";
+    const displayName = (newMemberName || memberWa).trim() || "A member";
+    await db.collection("notifications").add({
+        targetUid: ownerWaNumber,
+        title: "New stokvel join request",
+        body: `${displayName} requested to join your stokvel **${stokvelName}**.`,
+        type: "stokvel_new_member",
+        read: false,
+        createdAt: FieldValue.serverTimestamp(),
+    });
+    logAnalytics("notifyStokvelNewMember", uid, { stokvelId, ownerWaNumber: ownerWaNumber.slice(0, 6) + "***" });
+    return { notified: true };
+}
 // ---------- 10. createIkhokhaPaymentLink ----------
 async function createIkhokhaPaymentLinkImpl(uid, input) {
     const { amountCents, payeeUid, description, dealId } = input;
@@ -694,6 +738,331 @@ exports.checkVerificationResult = functions.https.onCall(async (data, context) =
     const payload = Object.assign(Object.assign({}, data), { waNumber: data.waNumber || uid });
     return ok(await checkVerificationResultImpl(uid, payload));
 });
+// ---------- 18. createLoanRequest (lending & borrowing) ----------
+async function createLoanRequestImpl(uid, input) {
+    const { amountCents, repayByDate, purpose, bank } = input;
+    if (!amountCents || amountCents <= 0) {
+        throw new functions.https.HttpsError("invalid-argument", "Need a positive amount my friend.");
+    }
+    if (!repayByDate || !purpose || !bank) {
+        throw new functions.https.HttpsError("invalid-argument", "Need repay date, purpose and bank.");
+    }
+    if (purpose.length > 80) {
+        throw new functions.https.HttpsError("invalid-argument", "Purpose must be at most 80 characters.");
+    }
+    const allowedBanks = ["capitec", "fnb", "standard_bank", "absa", "other"];
+    if (!allowedBanks.includes(bank)) {
+        throw new functions.https.HttpsError("invalid-argument", "Bank must be one of capitec, fnb, standard_bank, absa, other.");
+    }
+    const d = new Date(repayByDate);
+    if (isNaN(d.getTime())) {
+        throw new functions.https.HttpsError("invalid-argument", "repayByDate must be a valid date (YYYY-MM-DD or ISO string).");
+    }
+    const repayTs = admin.firestore.Timestamp.fromDate(d);
+    const now = FieldValue.serverTimestamp();
+    const ref = await db.collection("loan_requests").add({
+        borrowerUid: uid,
+        amountCents,
+        repayByDate: repayTs,
+        purpose,
+        bank,
+        status: "open",
+        createdAt: now,
+        updatedAt: now,
+    });
+    logAnalytics("createLoanRequest", uid, { loanRequestId: ref.id, amountCents });
+    return { loanRequestId: ref.id };
+}
+exports.createLoanRequest = functions.https.onCall(async (data, context) => {
+    const uid = requireAuth(context);
+    return ok(await createLoanRequestImpl(uid, data));
+});
+// ---------- 19. getLoanRequestsBatch (masked, for lenders) ----------
+function maskDisplayNameTs(displayName) {
+    const name = (displayName || "").trim();
+    if (!name)
+        return "Unknown";
+    const parts = name.split(/\s+/);
+    const first = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+    if (parts.length === 1)
+        return first;
+    const lastInitial = parts[parts.length - 1].charAt(0).toUpperCase();
+    return `${first} ${lastInitial}.`;
+}
+function formatBorrowerReputationTs(b) {
+    const score = typeof b.reputationScore === "number" ? b.reputationScore : 0;
+    const totalLoans = typeof b.totalLoansTaken === "number" ? b.totalLoansTaken : 0;
+    const onTime = typeof b.totalRepaidOnTime === "number" ? b.totalRepaidOnTime : 0;
+    const late = typeof b.totalRepaidLate === "number" ? b.totalRepaidLate : 0;
+    const def = typeof b.totalDefaulted === "number" ? b.totalDefaulted : 0;
+    if (totalLoans <= 0)
+        return `${score.toFixed(1)}★ (new borrower)`;
+    const parts = [];
+    if (onTime)
+        parts.push(`${onTime} on time`);
+    if (late)
+        parts.push(`${late} late`);
+    if (def)
+        parts.push(`${def} defaulted`);
+    const details = parts.length ? parts.join(", ") : "history";
+    return `${score.toFixed(1)}★ (${totalLoans} loans, ${details})`;
+}
+async function getLoanRequestsBatchImpl(uid, input) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+    const lenderUid = uid;
+    const limit = Math.min((_a = input.limit) !== null && _a !== void 0 ? _a : 3, 10);
+    const pageCursor = input.pageCursor;
+    // Already unlocked requests for this lender
+    const viewsSnap = await db.collection("lenders").doc(lenderUid).collection("views").get();
+    const unlockedIds = new Set();
+    viewsSnap.docs.forEach((doc) => {
+        var _a;
+        const d = doc.data();
+        unlockedIds.add((_a = d.loanRequestId) !== null && _a !== void 0 ? _a : doc.id);
+    });
+    let query = db.collection("loan_requests").where("status", "==", "open").orderBy("createdAt", "desc");
+    if (pageCursor) {
+        const cursorDoc = await db.collection("loan_requests").doc(pageCursor).get();
+        if (cursorDoc.exists) {
+            query = query.startAfter(cursorDoc);
+        }
+    }
+    const snap = await query.limit(limit + 1).get();
+    const items = [];
+    let nextCursor;
+    for (const doc of snap.docs) {
+        const id = doc.id;
+        if (unlockedIds.has(id))
+            continue;
+        const d = doc.data();
+        const borrowerUid = d.borrowerUid;
+        const borrowerSnap = borrowerUid ? await db.collection("borrowers").doc(borrowerUid).get() : null;
+        const borrower = (_b = borrowerSnap === null || borrowerSnap === void 0 ? void 0 : borrowerSnap.data()) !== null && _b !== void 0 ? _b : {};
+        const displayName = borrower.displayName || borrowerUid;
+        const maskedName = maskDisplayNameTs(displayName);
+        const repSummary = formatBorrowerReputationTs(borrower);
+        const repayBy = (_g = (_f = (_e = (_d = (_c = d.repayByDate) === null || _c === void 0 ? void 0 : _c.toDate) === null || _d === void 0 ? void 0 : _d.call(_c)) === null || _e === void 0 ? void 0 : _e.toISOString) === null || _f === void 0 ? void 0 : _f.call(_e)) !== null && _g !== void 0 ? _g : null;
+        const createdAtIso = (_m = (_l = (_k = (_j = (_h = d.createdAt) === null || _h === void 0 ? void 0 : _h.toDate) === null || _j === void 0 ? void 0 : _j.call(_h)) === null || _k === void 0 ? void 0 : _k.toISOString) === null || _l === void 0 ? void 0 : _l.call(_k)) !== null && _m !== void 0 ? _m : null;
+        items.push({
+            loanRequestId: id,
+            maskedName,
+            amountCents: d.amountCents,
+            repayByDate: repayBy,
+            reputationSummary: repSummary,
+            reputationScore: typeof borrower.reputationScore === "number" ? borrower.reputationScore : 0,
+            createdAt: createdAtIso,
+        });
+        if (items.length === limit) {
+            nextCursor = id;
+            break;
+        }
+    }
+    logAnalytics("getLoanRequestsBatch", lenderUid, { count: items.length, nextCursor });
+    return { items, nextCursor };
+}
+exports.getLoanRequestsBatch = functions.https.onCall(async (data, context) => {
+    const uid = requireAuth(context);
+    return ok(await getLoanRequestsBatchImpl(uid, data));
+});
+// ---------- 20. unlockLoanRequests (after Ikhokha payment webhook) ----------
+async function unlockLoanRequestsImpl(uid, input) {
+    var _a;
+    const lenderUid = uid;
+    const loanRequestIds = (_a = input.loanRequestIds) !== null && _a !== void 0 ? _a : [];
+    if (loanRequestIds.length === 0) {
+        throw new functions.https.HttpsError("invalid-argument", "loanRequestIds required.");
+    }
+    if (loanRequestIds.length > 3) {
+        throw new functions.https.HttpsError("invalid-argument", "Can only unlock up to 3 loan requests at a time.");
+    }
+    // Fee: R5 per request or R10 for batch of 3
+    let totalFeeCents;
+    if (loanRequestIds.length === 1) {
+        totalFeeCents = 500;
+    }
+    else if (loanRequestIds.length === 3) {
+        totalFeeCents = 1000;
+    }
+    else {
+        totalFeeCents = 500 * loanRequestIds.length;
+    }
+    const perRequestFee = Math.floor(totalFeeCents / loanRequestIds.length);
+    const viewsCol = db.collection("lenders").doc(lenderUid).collection("views");
+    const now = FieldValue.serverTimestamp();
+    const unlocked = [];
+    for (const rawId of loanRequestIds) {
+        const id = String(rawId || "").trim();
+        if (!id)
+            continue;
+        const reqRef = db.collection("loan_requests").doc(id);
+        const reqSnap = await reqRef.get();
+        if (!reqSnap.exists)
+            continue;
+        const d = reqSnap.data();
+        if (d.status !== "open")
+            continue;
+        const viewRef = viewsCol.doc(id);
+        const viewSnap = await viewRef.get();
+        if (!viewSnap.exists) {
+            await viewRef.set({
+                loanRequestId: id,
+                unlockedAt: now,
+                feePaidCents: perRequestFee,
+            });
+        }
+        unlocked.push(id);
+    }
+    logAnalytics("unlockLoanRequests", lenderUid, { unlockedCount: unlocked.length, totalFeeCents });
+    return { unlocked, totalFeeCents };
+}
+exports.unlockLoanRequests = functions.https.onCall(async (data, context) => {
+    const uid = requireAuth(context);
+    return ok(await unlockLoanRequestsImpl(uid, data));
+});
+// ---------- 21. uploadProofOfPayment (update loan + loan_request) ----------
+async function uploadProofOfPaymentImpl(uid, input) {
+    const { loanId, popUrl } = input;
+    if (!loanId || !popUrl) {
+        throw new functions.https.HttpsError("invalid-argument", "Need loanId and popUrl.");
+    }
+    const loanRef = db.collection("loans").doc(loanId);
+    const loanSnap = await loanRef.get();
+    if (!loanSnap.exists) {
+        throw new functions.https.HttpsError("not-found", "Loan not found.");
+    }
+    const loan = loanSnap.data();
+    if (loan.lenderUid !== uid) {
+        throw new functions.https.HttpsError("permission-denied", "Only the lender can upload proof for this loan.");
+    }
+    const loanRequestId = loan.loanRequestId;
+    const now = FieldValue.serverTimestamp();
+    await loanRef.update({
+        popUrl,
+        popUploadedAt: now,
+        status: "active",
+    });
+    if (loanRequestId) {
+        await db.collection("loan_requests").doc(loanRequestId).update({
+            status: "loaned",
+            updatedAt: now,
+        });
+    }
+    logAnalytics("uploadProofOfPayment", uid, { loanId, loanRequestId });
+    return { updated: true };
+}
+exports.uploadProofOfPayment = functions.https.onCall(async (data, context) => {
+    const uid = requireAuth(context);
+    return ok(await uploadProofOfPaymentImpl(uid, data));
+});
+// ---------- Helpers for Komani News import ----------
+const KOMANI_NEWS_URL = "https://www.komani.co.za/wp-json/wp/v2/posts?per_page=5";
+/** Strip HTML tags and normalize whitespace. */
+function stripHtml(html) {
+    if (!html || typeof html !== "string")
+        return "";
+    return html
+        .replace(/<\/?[^>]+>/g, " ")
+        .replace(/\[&hellip;\]|&hellip;/g, "…")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+/** Decode common HTML entities in title/text. */
+function decodeEntities(s) {
+    if (!s || typeof s !== "string")
+        return "";
+    return s
+        .replace(/&#8217;/g, "'")
+        .replace(/&#8216;/g, "'")
+        .replace(/&#8220;/g, '"')
+        .replace(/&#8221;/g, '"')
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"');
+}
+/** Derive tags from WP post: Yoast keywords → articleSection → class_list → default. */
+function deriveTagsFromWpPost(post) {
+    var _a, _b;
+    const graph = (_b = (_a = post.yoast_head_json) === null || _a === void 0 ? void 0 : _a.schema) === null || _b === void 0 ? void 0 : _b["@graph"];
+    if (Array.isArray(graph)) {
+        const article = graph.find((n) => n["@type"] === "NewsArticle");
+        if ((article === null || article === void 0 ? void 0 : article.keywords) && Array.isArray(article.keywords) && article.keywords.length > 0) {
+            return article.keywords.map((k) => String(k).toLowerCase().trim()).filter(Boolean);
+        }
+        const section = article === null || article === void 0 ? void 0 : article.articleSection;
+        if (section != null) {
+            const arr = Array.isArray(section) ? section : [section];
+            const out = arr.map((s) => String(s).toLowerCase().trim()).filter(Boolean);
+            if (out.length > 0)
+                return out;
+        }
+    }
+    const classList = post.class_list;
+    if (Array.isArray(classList)) {
+        const seen = new Set();
+        for (const c of classList) {
+            const s = String(c).trim();
+            if (s.startsWith("tag-") || s.startsWith("category-")) {
+                const part = s.slice(s.indexOf("-") + 1).replace(/-/g, " ").toLowerCase().trim();
+                if (part && !seen.has(part))
+                    seen.add(part);
+            }
+        }
+        if (seen.size > 0)
+            return Array.from(seen);
+    }
+    return ["komani-news"];
+}
+// ---------- Scheduled: importKomaniNews ----------
+/** Hourly: fetch Komani News WP API, dedupe by sourceId, write to news collection. */
+exports.importKomaniNews = functions.pubsub
+    .schedule("0 * * * *")
+    .timeZone("Africa/Johannesburg")
+    .onRun(async () => {
+    var _a, _b, _c, _d;
+    try {
+        const res = await fetch(KOMANI_NEWS_URL);
+        if (!res.ok) {
+            console.warn("KASI-ORACLE: importKomaniNews fetch failed", res.status, res.statusText);
+            return null;
+        }
+        const data = await res.json();
+        if (!Array.isArray(data)) {
+            console.warn("KASI-ORACLE: importKomaniNews response is not an array");
+            return null;
+        }
+        let imported = 0;
+        for (const post of data) {
+            if (typeof (post === null || post === void 0 ? void 0 : post.id) !== "number" || !post.link)
+                continue;
+            const existing = await db.collection("news").where("sourceId", "==", post.id).limit(1).get();
+            if (!existing.empty)
+                continue;
+            const titleRaw = (_b = (_a = post.title) === null || _a === void 0 ? void 0 : _a.rendered) !== null && _b !== void 0 ? _b : "";
+            const title = decodeEntities(stripHtml(titleRaw)) || "Untitled";
+            const excerptRaw = (_d = (_c = post.excerpt) === null || _c === void 0 ? void 0 : _c.rendered) !== null && _d !== void 0 ? _d : "";
+            const summaryEn = stripHtml(excerptRaw).slice(0, 300);
+            const tags = deriveTagsFromWpPost(post);
+            const doc = {
+                title,
+                link: post.link,
+                sourceUrl: post.link,
+                summaryEn: summaryEn || null,
+                tags,
+                authorUid: "komani-import",
+                createdAt: admin.firestore.Timestamp.fromDate(new Date(post.date)),
+                sourceId: post.id,
+            };
+            await db.collection("news").add(doc);
+            imported++;
+        }
+        console.log("KASI-ORACLE: importKomaniNews imported", imported);
+    }
+    catch (err) {
+        console.error("KASI-ORACLE: importKomaniNews error", err);
+    }
+    return null;
+});
 // ---------- Scheduled: expireOldInfoBits ----------
 /** Daily cleanup of expired InfoBits. */
 exports.expireOldInfoBits = functions.pubsub.schedule("0 2 * * *").onRun(async () => {
@@ -704,6 +1073,31 @@ exports.expireOldInfoBits = functions.pubsub.schedule("0 2 * * *").onRun(async (
     if (!snap.empty)
         await batch.commit();
     console.log("KASI-ORACLE: expireOldInfoBits deleted", snap.size);
+    return null;
+});
+/** Daily: set status to "expired" for pending InfoBits and transportFares older than 7 days (no points). */
+exports.expirePendingGamificationItems = functions.pubsub.schedule("0 3 * * *").onRun(async () => {
+    const now = admin.firestore.Timestamp.now();
+    const sevenDaysAgo = new Date(now.toMillis() - 7 * 24 * 60 * 60 * 1000);
+    const cutoff = admin.firestore.Timestamp.fromDate(sevenDaysAgo);
+    const infoBitsSnap = await db
+        .collection("infoBits")
+        .where("status", "==", "pending")
+        .where("pendingCreatedAt", "<", cutoff)
+        .limit(200)
+        .get();
+    const transportSnap = await db
+        .collection("transportFares")
+        .where("status", "==", "pending")
+        .where("pendingCreatedAt", "<", cutoff)
+        .limit(200)
+        .get();
+    const batch = db.batch();
+    infoBitsSnap.docs.forEach((doc) => batch.update(doc.ref, { status: "expired" }));
+    transportSnap.docs.forEach((doc) => batch.update(doc.ref, { status: "expired" }));
+    if (!infoBitsSnap.empty || !transportSnap.empty)
+        await batch.commit();
+    console.log("KASI-ORACLE: expirePendingGamificationItems infoBits=", infoBitsSnap.size, "transportFares=", transportSnap.size);
     return null;
 });
 // ---------- Triggers ----------

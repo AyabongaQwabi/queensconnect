@@ -1072,6 +1072,125 @@ export const uploadProofOfPayment = functions.https.onCall(async (data: UploadPr
   return ok(await uploadProofOfPaymentImpl(uid, data));
 });
 
+// ---------- Helpers for Komani News import ----------
+
+const KOMANI_NEWS_URL = "https://www.komani.co.za/wp-json/wp/v2/posts?per_page=5";
+
+/** Strip HTML tags and normalize whitespace. */
+function stripHtml(html: string): string {
+  if (!html || typeof html !== "string") return "";
+  return html
+    .replace(/<\/?[^>]+>/g, " ")
+    .replace(/\[&hellip;\]|&hellip;/g, "…")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Decode common HTML entities in title/text. */
+function decodeEntities(s: string): string {
+  if (!s || typeof s !== "string") return "";
+  return s
+    .replace(/&#8217;/g, "'")
+    .replace(/&#8216;/g, "'")
+    .replace(/&#8220;/g, '"')
+    .replace(/&#8221;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"');
+}
+
+/** Derive tags from WP post: Yoast keywords → articleSection → class_list → default. */
+function deriveTagsFromWpPost(post: {
+  yoast_head_json?: { schema?: { "@graph"?: Array<{ "@type"?: string; keywords?: string[]; articleSection?: string | string[] }> } };
+  class_list?: string[];
+}): string[] {
+  const graph = post.yoast_head_json?.schema?.["@graph"];
+  if (Array.isArray(graph)) {
+    const article = graph.find((n) => n["@type"] === "NewsArticle");
+    if (article?.keywords && Array.isArray(article.keywords) && article.keywords.length > 0) {
+      return article.keywords.map((k) => String(k).toLowerCase().trim()).filter(Boolean);
+    }
+    const section = article?.articleSection;
+    if (section != null) {
+      const arr = Array.isArray(section) ? section : [section];
+      const out = arr.map((s) => String(s).toLowerCase().trim()).filter(Boolean);
+      if (out.length > 0) return out;
+    }
+  }
+  const classList = post.class_list;
+  if (Array.isArray(classList)) {
+    const seen = new Set<string>();
+    for (const c of classList) {
+      const s = String(c).trim();
+      if (s.startsWith("tag-") || s.startsWith("category-")) {
+        const part = s.slice(s.indexOf("-") + 1).replace(/-/g, " ").toLowerCase().trim();
+        if (part && !seen.has(part)) seen.add(part);
+      }
+    }
+    if (seen.size > 0) return Array.from(seen);
+  }
+  return ["komani-news"];
+}
+
+interface WpPost {
+  id: number;
+  date: string;
+  link: string;
+  title?: { rendered?: string };
+  excerpt?: { rendered?: string };
+  yoast_head_json?: { schema?: { "@graph"?: Array<{ "@type"?: string; keywords?: string[]; articleSection?: string | string[] }> } };
+  class_list?: string[];
+}
+
+// ---------- Scheduled: importKomaniNews ----------
+
+/** Hourly: fetch Komani News WP API, dedupe by sourceId, write to news collection. */
+export const importKomaniNews = functions.pubsub
+  .schedule("0 * * * *")
+  .timeZone("Africa/Johannesburg")
+  .onRun(async () => {
+    try {
+      const res = await fetch(KOMANI_NEWS_URL);
+      if (!res.ok) {
+        console.warn("KASI-ORACLE: importKomaniNews fetch failed", res.status, res.statusText);
+        return null;
+      }
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        console.warn("KASI-ORACLE: importKomaniNews response is not an array");
+        return null;
+      }
+      let imported = 0;
+      for (const post of data as WpPost[]) {
+        if (typeof post?.id !== "number" || !post.link) continue;
+        const existing = await db.collection("news").where("sourceId", "==", post.id).limit(1).get();
+        if (!existing.empty) continue;
+        const titleRaw = post.title?.rendered ?? "";
+        const title = decodeEntities(stripHtml(titleRaw)) || "Untitled";
+        const excerptRaw = post.excerpt?.rendered ?? "";
+        const summaryEn = stripHtml(excerptRaw).slice(0, 300);
+        const tags = deriveTagsFromWpPost(post);
+        const doc = {
+          title,
+          link: post.link,
+          sourceUrl: post.link,
+          summaryEn: summaryEn || null,
+          tags,
+          authorUid: "komani-import",
+          createdAt: admin.firestore.Timestamp.fromDate(new Date(post.date)),
+          sourceId: post.id,
+        };
+        await db.collection("news").add(doc);
+        imported++;
+      }
+      console.log("KASI-ORACLE: importKomaniNews imported", imported);
+    } catch (err) {
+      console.error("KASI-ORACLE: importKomaniNews error", err);
+    }
+    return null;
+  });
+
 // ---------- Scheduled: expireOldInfoBits ----------
 
 /** Daily cleanup of expired InfoBits. */
